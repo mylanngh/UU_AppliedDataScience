@@ -1,0 +1,383 @@
+---
+title: 'Section 4: Internal Validity (Lisa)'
+author: "Lan Nguyen (6687547) | Lisa Verlare (6929699) | Nguyen Thuy Duong (6827209)"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+
+```{r packages, include=FALSE}
+library(haven)
+library(tidyverse)
+library(dplyr)
+library(clubSandwich)
+library(kableExtra)
+library(vtable)
+library(ggpubr)
+library(gridExtra)
+library(ggplot2)
+library(Hmisc) # statistic table format 
+library(strucchange)  #Chow test
+library(margins) # logit marginal effect
+library(sandwich) # correct downward-biased standard errors
+library(corrplot)
+library(RColorBrewer)
+library(webshot)
+# webshot::install_phantomjs()
+library(magick)
+library(psych)
+library(ggpubr)
+```
+
+```{r}
+# loading the data sets into the environment
+data_1999 <- readRDS(file = "data/data_1999.Rda")
+data_2000 <- readRDS(file = "data/data_2000.Rda")
+data_2001 <- readRDS(file = "data/data_2001.Rda")
+data_2002 <- readRDS(file = "data/data_2002.Rda")
+```
+
+
+The first part of this section describes a replicated table of the Covariate Balance for **Panel A. 2001** and **Panel B. 2000** of Table A2. We replicate the original covariate balance table provided by the authors in table A2 for both the years 2001 and 2000. We conclude this part by producing the corresponding table.
+
+# Panel A. 2001
+```{r}
+# create a data frame to put in the means and standard errors
+table_a2_2001 <- data.frame(NULL)
+
+# every variable for which the covariate needs to be calculated
+varlist <- c(
+  "school_arab", "school_religious", "father_educ", "mother_educ", 
+  "siblings", "immigrant", "lagscore"
+  )
+```
+
+```{r}
+# for loop that calculates the mean and differences between control and 
+# treatment group and its standard errors
+
+# All
+for(i in 1:7){
+  
+  # mean of the column 
+  e_mean <- mean(data_2001[[varlist[i]]])
+  
+  # linear regression on a variable from varlist
+  x <- lm(as.formula(paste(varlist[[i]], "~ treated")), data = data_2001)
+  
+  # clustered standard errors
+  y <- coef_test(obj = x, cluster = data_2001$school_id, vcov = "CR1")
+  
+  # assigning values to the table
+  table_a2_2001[i, 1] <- e_mean
+  table_a2_2001[i, 2] <- y[2,2]
+  table_a2_2001[i, 3] <- y[2,3]
+  }
+```
+
+```{r}
+# for loop that calculates the mean and differences between control and 
+# treatment group and its standard errors
+
+# Boys
+for (i in 1:7){
+  
+    # mean of the column 
+    e_mean <- mean(subset(data_2001, boy == 1)[[varlist[i]]])
+    
+    # linear regression
+    x <- lm(
+    as.formula(paste(varlist[[i]], "~ treated")), 
+    data = subset(data_2001, boy == 1)
+    )
+    
+    # clustered standard errors
+    y <- coef_test(
+    obj = x, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    vcov = "CR1"
+    )
+    
+  # assigning values to the table
+  table_a2_2001[i, 4] <- e_mean
+  table_a2_2001[i, 5] <- y[2,2]
+  table_a2_2001[i, 6] <- y[2,3]
+  }
+```
+
+```{r}
+# for loop that calculates the mean and differences between control and 
+# treatment group and its standard errors
+
+# Girls
+for (i in 1:7){
+    
+    # mean of the column 
+    e_mean <- mean(subset(data_2001, boy == 0)[[varlist[i]]])
+    
+    # linear regression
+    x <- lm(
+      as.formula(paste(varlist[[i]], "~ treated")), 
+      data = subset(data_2001, boy == 0)
+      )
+    
+    # clustered standard errors
+    y <- coef_test(
+      obj = x, 
+      cluster = subset(data_2001, boy == 0)$school_id, 
+      vcov = "CR1"
+      )
+    
+    # assigning values to the table
+    table_a2_2001[i, 7] <- e_mean
+    table_a2_2001[i, 8] <- y[2,2]
+    table_a2_2001[i, 9] <- y[2,3]
+  }
+```
+
+Next, we format our table.
+```{r}
+# renaming the data frame columns
+colnames(table_a2_2001) <- c(
+  "Mean All", "Difference All", "SE All", 
+  "Mean Boys", "Difference Boys", "SE Boys", 
+  "Mean Girls", "Difference Girls", "SE Girls"
+  )
+
+# renaming the data frame rows
+rownames(table_a2_2001) <- c(
+  "school_arab", "school_religious", "father_educ", "mother_educ", 
+  "siblings", "immigrant", "lagscore"
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_a2_2001 <- round(table_a2_2001, 3)
+```
+
+# Panel B. 2000
+```{r}
+# create a data frame to put in the means and standard errors
+table_a2_2000 <- data.frame(NULL)
+
+# every variable for which the covariate needs to be calculated
+varlist2 <- c(
+  "bagrut_status", "school_arab", "school_religious", "father_educ", 
+  "mother_educ", "siblings", "immigrant", "lagscore"
+  )
+```
+
+```{r}
+# for loop that calculates the differences between control and treatment group
+# and the standard errors
+
+# All
+for(i in 1:8){
+  
+  # mean of the column 
+  e_mean <- mean(data_2000[[varlist2[i]]])
+  
+  # linear regression
+  x <- lm(as.formula(paste(varlist2[[i]], "~ treated")), data = data_2000)
+  
+  # clustered standard errors
+  y <- coef_test(obj = x, cluster = data_2000$school_id, vcov = "CR1")
+  
+  # assigning values to the table
+  table_a2_2000[i, 1] <- e_mean
+  table_a2_2000[i, 2] <- y[2,2]
+  table_a2_2000[i, 3] <- y[2,3]
+  }
+```
+
+```{r}
+# for loop that calculates the differences between control and treatment group
+# and the standard errors
+
+# Boys
+for (i in 1:8){
+  
+    # mean of the column 
+    e_mean <- mean(subset(data_2000, boy == 1)[[varlist2[i]]])
+    
+    # linear regression
+    x <- lm(
+    as.formula(paste(varlist2[[i]], "~ treated")), 
+    data = subset(data_2000, boy == 1)
+    )
+    
+    # clustered standard errors
+    y <- coef_test(
+    obj = x, 
+    cluster = subset(data_2000, boy == 1)$school_id, 
+    vcov = "CR1"
+    )
+    
+  # assigning values to the table
+  table_a2_2000[i, 4] <- e_mean
+  table_a2_2000[i, 5] <- y[2,2]
+  table_a2_2000[i, 6] <- y[2,3]
+  }
+```
+
+```{r}
+# for loop that calculates the differences between control and treatment group
+# and the standard errors
+
+# Girls
+for (i in 1:8){
+  
+  # mean of the column 
+    e_mean <- mean(subset(data_2000, boy == 0)[[varlist2[i]]])
+    
+    # linear regression
+    x <- lm(
+      as.formula(paste(varlist2[[i]], "~ treated")), 
+      data = subset(data_2000, boy == 0)
+      )
+    
+    # clustered standard errors
+    y <- coef_test(
+      obj = x, 
+      cluster = subset(data_2000, boy == 0)$school_id, 
+      vcov = "CR1"
+      )
+    
+    # assigning values to the table
+    table_a2_2000[i, 7] <- e_mean
+    table_a2_2000[i, 8] <- y[2,2]
+    table_a2_2000[i, 9] <- y[2,3]
+  }
+```
+
+Next, we format our table.
+```{r}
+# renaming the data frame columns
+colnames(table_a2_2000) <- c(
+  "Mean All", "Difference All", "SE All", 
+  "Mean Boys", "Difference Boys", "SE Boys", 
+  "Mean Girls", "Difference Girls", "SE Girls"
+  )
+
+# renaming the data frame rows
+rownames(table_a2_2000) <- c(
+  "bagrut_status", "school_arab", "school_religious", "father_educ", 
+  "mother_educ", "siblings", "immigrant", "lagscore"
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_a2_2000 <- round(table_a2_2000, 3)
+```
+
+# Translating into a Table
+```{r}
+## 2001
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:7){
+  table_a2_2001[i, 2] <- paste(
+    table_a2_2001[i, 2], "<br>(", table_a2_2001[i, 3], ")", sep = ""
+    )
+  table_a2_2001[i, 5] <- paste(
+    table_a2_2001[i, 5], "<br>(", table_a2_2001[i, 6], ")", sep = ""
+    )
+  table_a2_2001[i, 8] <- paste(
+    table_a2_2001[i, 8], "<br>(", table_a2_2001[i, 9], ")", sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_a2_2001[, 2] <- linebreak(table_a2_2001[, 2])
+table_a2_2001[, 5] <- linebreak(table_a2_2001[, 5])
+table_a2_2001[, 8] <- linebreak(table_a2_2001[, 8])
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_a2_2001 <- table_a2_2001 %>%
+ dplyr::select(-3, -6, -9)
+
+## 2000
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:8){
+  table_a2_2000[i, 2] <- paste(
+    table_a2_2000[i, 2], "<br>(", table_a2_2000[i, 3], ")", sep = ""
+    )
+  table_a2_2000[i, 5] <- paste(
+    table_a2_2000[i, 5], "<br>(", table_a2_2000[i, 6], ")", sep = ""
+    )
+  table_a2_2000[i, 8] <- paste(
+    table_a2_2000[i, 8], "<br>(", table_a2_2000[i, 9], ")", sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_a2_2000[, 2] <- linebreak(table_a2_2000[, 2])
+table_a2_2000[, 5] <- linebreak(table_a2_2000[, 5])
+table_a2_2000[, 8] <- linebreak(table_a2_2000[, 8])
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_a2_2000 <- table_a2_2000 %>%
+  dplyr::select(-3, -6, -9)
+
+# Merging the tables for each year into one table
+table_a2 <- rbind(table_a2_2001, table_a2_2000)
+
+# Changing the row names
+rownames(table_a2) <- c(
+  "Arab school", "Religious school", "Father's education", "Mother's education", 
+  "Number of siblings", "Immigrant", "Lagged score", "Bagrut rate", 
+  "Arab school ", "Religious school ", "Father's  education ", 
+  "Mother's education ", "Number of siblings ", "Immigrant ", "Lagged score "
+  )
+
+# Creating the table
+table_a2 %>%
+  kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 3: Covariate Balance</b>",
+    col.names = c(
+        "Mean", "Differences", "Mean", "Differences", "Mean", "Differences"
+        ),
+    align = "l"
+    ) %>%
+  kable_classic(
+    full_width = F, html_font = "Times New Roman", position = "left"
+    ) %>%
+  add_header_above(c(" " = 1, "All" = 2, "Boys" = 2, "Girls" = 2)) %>%
+  
+  # Panel A
+  pack_rows("Year: 2001", 1, 7, italic = TRUE, bold = FALSE) %>%  
+  pack_rows("School covariates", 1, 2) %>%
+  pack_rows("Micro covariates", 3, 7) %>%
+  
+  # Panel B
+  pack_rows("Year: 2000", 8, 15, italic = TRUE, bold = FALSE) %>%
+  pack_rows("School covariates", 9, 10) %>%
+  pack_rows("Micro covariates", 11, 15) %>%
+  
+  # Adding footnotes for the table
+  footnote(
+    general = c(
+      "Table columns report means and differences between the treatment and control group. Standard errors are clustered at the school level and reported in parantheses.",
+      "This is a replication of Table B3 (Angrist & Lavy, 2009, p. 1410)"
+      ), 
+    footnote_as_chunk = T
+  )
+
+```

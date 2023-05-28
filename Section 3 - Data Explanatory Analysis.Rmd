@@ -1,0 +1,1216 @@
+---
+title: 'Section 3: Data Explanatory Analysis'
+author: "Lan Nguyen (6687547) | Lisa Verlare (6929699) | Nguyen Thuy Duong (6827209)"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+```{r packages, include=FALSE}
+library(haven)
+library(tidyverse)
+library(dplyr)
+library(clubSandwich)
+library(kableExtra)
+library(vtable)
+library(ggpubr)
+library(gridExtra)
+library(ggplot2)
+library(Hmisc) # statistic table format 
+library(strucchange)  #Chow test
+library(margins) # logit marginal effect
+library(sandwich) # correct downward-biased standard errors
+library(corrplot)
+library(RColorBrewer)
+library(webshot)
+webshot::install_phantomjs()
+library(magick)
+library(psych)
+library(ggpubr)
+```
+
+
+# Data Preparation (Lisa)
+
+The first part of this data preparation section consists of preparations to join the data sets together for more efficient coding and several functions are used to clean up the data.
+
+The second part of this section consists of a small amount of variable descriptions and will produce a table with all variables.
+
+The third part of this section shows a small sample description and the fourth saves the separate data sets again, in order to easily find each year.
+
+```{r data}
+# import the data sets from the data folder
+year1999 <- read_dta("data/base99.dta")
+year2000 <- read_dta("data/base00.dta")
+year2001 <- read_dta("data/base01.dta")
+year2002 <- read_dta("data/base02.dta")
+```
+
+```{r tidy}
+# Look at the data to see whether the data sets are tidy (i.e., one value in a 
+# cell) and does not need any adjustment in terms of needing to separate cells 
+# or columns
+head(year1999)
+head(year2000)
+head(year2001)
+head(year2002)
+```
+
+```{r missing}
+# Checking for missing values
+sum(is.na(year1999))
+sum(is.na(year2000))
+sum(is.na(year2001))
+sum(is.na(year2002))
+```
+
+**Conclusion: **
+
+    * Each dataset has 25 columns
+  
+    * Each dataset has one entry per column and rows are clearly observations for separate students
+  
+    * Each dataset has 0 missing values. 
+
+Next, we merge the data sets in order to make some changes that are not specific to a year.
+```{r columns}
+# Check whether the columns are the same, otherwise adjustments will have to be 
+# made before they can be joined together
+identical(colnames(year1999), colnames(year2000))
+identical(colnames(year1999), colnames(year2001))
+identical(colnames(year1999), colnames(year2002))
+```
+
+Each data set has identical column names, which means that each data set has the same sort of observations. Hence, we can merge the data sets together.
+
+```{r merge}
+# Merging / Joining all data sets into one data set to make the 
+# cleaning up process easier
+data <- full_join(year1999, year2000)
+data <- full_join(data, year2001)
+data <- full_join(data, year2002)
+```
+
+
+Now that the data sets are merged together, we can efficiently clean up the data set.
+
+```{r rename}
+# Renaming variables to make them more understandable
+data <- data %>%
+  rename(
+    siblings = m_ahim,
+    immigrant = ole5, 
+    father_educ = educav,
+    mother_educ = educem,
+    bagrut_status = zakaibag,
+    school_religious = semrel,
+    school_arab = semarab
+  )
+```
+
+The `year` variable now indicates a date with '00' instead of 2000. Otherwise, it could be confusing when filtering. 
+```{r years}
+# Naming year entries according to their full year, which will make it easier 
+# to filter out years and make them more understandable
+data <- data %>%
+  mutate(
+    year = replace(year, year == 99, 1999),
+    year = replace(year, year == 0, 2000),
+    year = replace(year, year == 1, 2001),
+    year = replace(year, year == 2, 2002)
+    )
+```
+
+The authors have also coded additional variables.
+```{r variables}
+# Adding and removing variables for the replication process
+
+data <- data %>% 
+   mutate(
+      # at least 4 siblings dummy
+      siblings_4 = as.numeric(siblings >= 4),
+      
+      # Categorizing pair and school_id as a factor
+      pair = as.factor(pair),
+      school_id = as.factor(school_id)
+      ) %>%
+  
+  # removing variables we will not be using in our research
+  select(
+    -student_id, -att18, -att20, -att22, -att24, -awr18, -awr20, -awr22, -awr24,
+    -achv_math, -achv_eng, -achv_hib
+    )
+```
+
+This variable is for our own analysis.
+```{r siblings}
+# Creating a siblings variable into a categorical variable
+data$sib_category <- as.factor(
+  ifelse(data$siblings == 1, "1",
+         ifelse(data$siblings == 2, "2",
+                ifelse(data$siblings == 3, "3",
+                       ifelse(data$siblings == 4, "4", "4+"
+                              )
+                       )
+                )
+         )
+  )
+
+```
+
+We now separate the data sets again, to make individual variables per year.
+
+```{r save}
+# Saving the final data, in case we will use another Rmd file or for any other
+# purpose
+saveRDS(data, file = "data/full_data.Rdata")
+
+# splitting up the datasets again per year and saving them to  use in other Rmd
+# files
+data_1999 <- data %>%
+  filter(year == 1999)
+
+data_2000 <- data %>%
+  filter(year == 2000)
+
+data_2001 <- data %>%
+  filter(year == 2001)
+
+data_2002 <- data %>%
+  filter(year == 2002)
+```
+
+
+```{r quartiles}
+# create quantile dummies for 1999
+data_1999 <- data_1999 %>% 
+  mutate(
+    
+    # quartiles
+    ls_100 = as.numeric(lagscore >= quantile(lagscore, 0.75)),
+    ls_75 = as.numeric(
+      lagscore >= quantile(lagscore, 0.50) &
+        lagscore < quantile(lagscore, 0.75)
+      ),
+    ls_50 = as.numeric(
+      lagscore >= quantile(lagscore, 0.25) & 
+        lagscore < quantile(lagscore, 0.50)
+      ),
+    ls_25 =  as.numeric(lagscore < quantile(lagscore, 0.25)),
+    
+    # top and bottom marginal groups
+    top_ls = ifelse(ls_75 == 1 | ls_100 == 1, 1, 0),
+    bot_ls = ifelse(ls_25 == 1 | ls_50 == 1, 1, 0),
+    
+    # lagged score
+    ls = lagscore
+    )
+
+# create quantile dummies for 2000
+data_2000 <- data_2000 %>% 
+  mutate(
+    
+    # quartiles
+    ls_100 = as.numeric(lagscore >= quantile(lagscore, 0.75)),
+    ls_75 = as.numeric(
+      lagscore >= quantile(lagscore, 0.50) &
+        lagscore < quantile(lagscore, 0.75)
+      ),
+    ls_50 = as.numeric(
+      lagscore >= quantile(lagscore, 0.25) & 
+        lagscore < quantile(lagscore, 0.50)
+      ),
+    ls_25 =  as.numeric(lagscore < quantile(lagscore, 0.25)),
+    
+    # top and bottom marginal groups
+    top_ls = ifelse(ls_75 == 1 | ls_100 == 1, 1, 0),
+    bot_ls = ifelse(ls_25 == 1 | ls_50 == 1, 1, 0),
+    
+    # lagged score
+    ls = lagscore
+    )
+
+# create quantile, marginal top and bottom dummies for 2001
+data_2001 <- data_2001 %>% 
+  mutate(
+    
+    # quartiles
+    ls_100 = as.numeric(lagscore >= quantile(lagscore, 0.75)),
+    ls_75 = as.numeric(
+      lagscore >= quantile(lagscore, 0.50) &
+        lagscore < quantile(lagscore, 0.75)
+      ),
+    ls_50 = as.numeric(
+      lagscore >= quantile(lagscore, 0.25) & 
+        lagscore < quantile(lagscore, 0.50)
+      ),
+    ls_25 =  as.numeric(lagscore < quantile(lagscore, 0.25)),
+    
+    # top and bottom marginal groups
+    top_ls = ifelse(ls_75 == 1 | ls_100 == 1, 1, 0),
+    bot_ls = ifelse(ls_25 == 1 | ls_50 == 1, 1, 0),
+    
+    # lagged score
+    ls = lagscore
+         )
+
+# create quantile, marginal top and bottom dummies for 2002
+data_2002 <- data_2002 %>% 
+  mutate(
+    
+    # quartiles
+    ls_100 = as.numeric(lagscore >= quantile(lagscore, 0.75)),
+    ls_75 = as.numeric(
+      lagscore >= quantile(lagscore, 0.50) &
+        lagscore < quantile(lagscore, 0.75)
+      ),
+    ls_50 = as.numeric(
+      lagscore >= quantile(lagscore, 0.25) & 
+        lagscore < quantile(lagscore, 0.50)
+      ),
+    ls_25 =  as.numeric(lagscore < quantile(lagscore, 0.25)),
+    
+    # top and bottom marginal groups
+    top_ls = ifelse(ls_75 == 1 | ls_100 == 1, 1, 0),
+    bot_ls = ifelse(ls_25 == 1 | ls_50 == 1, 1, 0),
+    
+    # lagged score
+    ls = lagscore
+         )
+```
+
+We will save the data sets in the folder *data*, because we have separated our code into multiple Rmd files. This will make it easy to access.
+
+```{r}
+# saving the data sets
+saveRDS(data_1999, file = "data/data_1999.Rda")
+saveRDS(data_2000, file = "data/data_2000.Rda")
+saveRDS(data_2001, file = "data/data_2001.Rda")
+saveRDS(data_2002, file = "data/data_2002.Rda")
+
+```
+
+## Variable Description (Lisa)
+In this part we show a small variable description and generate a *Variable Description Table* that will be included in the paper. We look at the data in general, as this is in regards to variables, not years.
+
+```{r class}
+# Check what the class of each variable is
+lapply(data, class)
+```
+
+```{r dummies}
+# Check whether those we suspect to be dummies are actually dummies
+summary(data)
+```
+**Conclusion: **
+
+    * There are 12 variables that are numeric, of which 7 are binary dummies.
+    * There are 3 variables that are factors
+
+**Disclaimer:** The following table describes the data in general, not per year.
+
+```{r Variable Description Table}
+# input for the variable description table
+text_tbl <- data.frame(
+  Variables = c(
+    "treated", "pair", "siblings", "boy", "immigrant", "father_educ", 
+    "mother_educ", "bagrut_status", "lagscore", "school_religious", 
+    "school_arab", "year", "ls_#", "siblings_4", "sib_group"
+    ),
+
+  Description = c(
+    "Treatment indicator, i.e., treated (1) and treatment (0)",
+    "Treatment pair. Each treated school is paired to an untreated school that 
+    are most similar in characteristics.",
+    "Number of siblings", 
+    "Gender indicator, i.e., boy (1) and girl (0)", 
+    "Immigrant indicator, i.e., immigrant (1) and non-immigrant (0)",
+    "Father’s years of schooling", 
+    "Mother’s years of schooling", 
+    "Bagrut status, i.e., Bagrut (1) and no Bagrut (0)", 
+    "Lagged Bagrut score, based on Bagrut rates from 1999", 
+    "Indicator of Jewish religious school, i.e., Jewish religious (1) and 
+    non-Jewish religious (0)", 
+    "Indicator of Arab school, i.e., Arab (1) and non-Arab (0)",
+    "Year indicator", 
+    "Indicators of quantiles (25, 50, 75, 100), i.e., quantile (1) and not in 
+    the quantile (0)",
+    "Indicator whether the individual has 4 or more siblings, i.e. 4(+) siblings 
+    (1) and less than 4 siblings (0)",
+    "Categorical variable for the amount of siblings, ranging from 1-4+"
+    )
+)
+
+# Creating the table
+kbl(text_tbl, caption = "<b>Table 1: Variable Descripton</b>") %>%
+  kable_classic(full_width = FALSE, html_font = "Times New Roman") %>%
+  kable_styling(bootstrap_options = c("bordered", "basic")) %>%
+  row_spec(0, bold = TRUE) %>%
+  column_spec(1, bold = FALSE, border_right = TRUE, background = "lightgrey") %>%
+  column_spec(2, width = "16cm") %>%
+  footnote(
+    general = c(
+      "The table describes the variables in general, they are not year specific"
+      ),
+    footnote_as_chunk = T
+  )
+```
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+# Data Descriptives (Duong)
+
+This section encompasses two parts, with the first one providing a replicated statistical description of the administrative dataset for the Panel A.2001 and Panel B.2002 of the Table 1. Sizes of different treatment groups are also compared. The second part statistically describes the relationship between variable of interests (siblings_4) and other variables in the sample data_2001.
+
+## Replication Table 1
+
+### Administrative Dataset 
+
+```{r}
+# All variables in the Experimental sample
+summary(data)
+```
+
+---
+
+### Panel A.2001
+
+```{r}
+# All variables in the treated year 2001 sample
+summary(data_2001)
+
+# Subset samples
+  # Subset for boys
+summary(subset(data_2001, boy == 1))
+  # Subset for girls 
+summary(subset(data_2001, boy == 0))
+```
+
+```{r}
+# Comparing statistics of key variables in full sample and 2001 sample 
+
+list("siblings" = summary(data$siblings),
+     "siblings_2001" = summary(data_2001$siblings),
+     "father_educ" = summary(data$father_educ),
+     "father_educ_2001" = summary(data_2001$father_educ),
+     "mother_educ_2001" = summary(data_2001$mother_educ),
+     "mother_educ" = summary(data$mother_educ))
+```
+
+---
+
+### Panel B.2000
+
+```{r}
+# All variables in the control year 2000 sample
+summary(data_2000)
+
+# Subset samples
+  # Subset for boys
+summary(subset(data_2000, boy == 1))
+  # Subset for girls 
+summary(subset(data_2000, boy == 0))
+```
+
+```{r}
+# Comparing statistics of key variables in full sample and 2000 sample 
+
+list("siblings" = summary(data$siblings),
+     "siblings_2000" = summary(data_2000$siblings),
+     "father_educ" = summary(data$father_educ),
+     "father_educ_2000" = summary(data_2000$father_educ),
+     "mother_educ_2000" = summary(data_2000$mother_educ),
+     "mother_educ" = summary(data$mother_educ))
+```
+
+We compare the sizes of different treatment groups between samples and see that treatment groups are relatively equal in size.
+
+```{r}
+# Sample sizes
+# Sizes of Treated vs Control groups in 
+  #Full data set
+data %>% group_by(treated) %>% count()
+
+  # 2001 sample
+  # Relatively equally distributed: control = 1876, treated = 1945
+data_2001 %>% group_by(treated) %>% count()
+
+  # 2000 sample
+data_2000 %>% group_by(treated) %>% count()
+```
+
+```{r}
+# Visualization
+ggdensity(data, 
+          x = "year", 
+          fill = "treated",  
+          palette = "jco")
+
+p <- ggplot(data, aes(x = year,
+                 y = ..count.., 
+                 fill = as.factor(treated))) +
+  geom_bar() +
+  labs(y = "") +
+  guides(fill=guide_legend(title="")) + 
+  scale_fill_discrete(labels = c("Control","Treatment")) +
+  theme_classic()
+
+
+annotate_figure(p, 
+                top = text_grob("Sizes of treated vs control groups across years ",
+                color = "red", face = "bold", size = 12))
+```
+
+We want to see if students dropped out of the research. 
+```{r}
+# Gender distribution over year
+data %>% group_by(boy) %>% count()
+data_2001 %>% group_by(boy) %>% count()
+data_2000 %>% group_by(boy) %>% count()
+```
+
+```{r}
+# Visualization
+ggdensity(data, 
+          x = "year", 
+          fill = "boy",  
+          palette = "jco")
+
+p <- ggplot(data, aes(x = year,
+                 y = ..count.., 
+                 fill = as.factor(boy))) +
+  geom_bar() +
+  labs(y = "") +
+  guides(fill=guide_legend(title="")) + 
+  scale_fill_discrete(labels = c("Girls","Boys")) +
+  theme_classic()
+
+
+annotate_figure(p, 
+                top = text_grob("Number of boys and girls over year",
+                color = "red", face = "bold", size = 12))
+```
+
+---
+
+### Descriptive Statistics Table
+
+This includes the code for creating a table illustrating the means and standard errors of individual variables in the whole sample and subset samples for the year 2001 and 2000. This is a partial replication of the Table 1. 
+
+**Table 1: Panel A.2001**
+
+```{r}
+# dataframe to contain the means and standard errors
+desc_table_01 <- data.frame(NULL)
+desc_var <- c("bagrut_status", "school_arab", "school_religious",
+               "father_educ", "mother_educ", "siblings", "immigrant",
+               "lagscore", "siblings_4", "")
+
+# for-loop to assign values into dataframe
+
+  ## All observations
+for(i in 1:10){
+  
+  # means of individual covariates
+  mean <- mean(data_2001[[desc_var[i]]])
+  
+  # standard errors of individual covariates
+  sd <- sd(data_2001[[desc_var[i]]])
+  
+  # number of observations
+  obs <- nrow(data_2001)
+  
+  # assigning values to the table
+  desc_table_01[i, 1] <- mean
+  desc_table_01[i, 2] <- sd
+  desc_table_01[10, 1] <- obs
+  }
+
+  ## Sample for boys
+for (i in 1:10){
+  
+  # mean of the column 
+  mean <- mean(subset(data_2001, boy == 1)[[desc_var[i]]])
+    
+  # standard errors of individual covariates
+  sd <- sd(subset(data_2001, boy == 1)[[desc_var[i]]])
+  
+  # number of observations
+  obs <- nrow(subset(data_2001, boy == 1))
+    
+  # assigning values to the table
+  desc_table_01[i, 3] <- mean
+  desc_table_01[i, 4] <- sd
+  desc_table_01[10, 2] <- obs
+  }
+
+  ## Sample for girls
+for (i in 1:10){
+    
+    # mean of the column 
+  mean <- mean(subset(data_2001, boy == 1)[[desc_var[i]]])
+    
+  # standard errors of individual covariates
+  sd <- sd(subset(data_2001, boy == 1)[[desc_var[i]]])
+  
+  # number of observations
+  obs <- nrow(subset(data_2001, boy == 0))
+    
+  # assigning values to the table
+  desc_table_01[i, 5] <- mean 
+  desc_table_01[i, 6] <- sd
+  desc_table_01[10, 3] <- obs
+  }
+
+# Formatting
+
+  ## Renaming columns
+colnames(desc_table_01) <- c(
+  "All", "Boy sample", "Girl sample")
+  
+  ## Renaming rows
+rownames(desc_table_01) <- c("Bagrut rate", "Arab school", "Religious school",  "Father's education", "Mother's_education", "Number of siblings", "Immigrant",  "Lagged score", "Siblings category", "Number of observations")
+
+  ## Round values
+desc_table_01 <- round(desc_table_01, 3)
+
+# Print the results
+desc_table_01
+```
+
+
+**Table 1: Panel B.2000**
+
+```{r}
+# dataframe to contain the means and standard errors
+desc_table_00 <- data.frame(NULL)
+desc_var <- c("bagrut_status", "school_arab", "school_religious",
+               "father_educ", "mother_educ", "siblings", "immigrant",
+               "lagscore", "siblings_4", "")
+
+# for-loop to assign values into dataframe
+
+  ## All observations
+for(i in 1:10){
+  
+  # means of individual covariates
+  mean <- mean(data_2000[[desc_var[i]]])
+  
+  # standard errors of individual covariates
+  sd <- sd(data_2000[[desc_var[i]]])
+  
+  # number of observations
+  obs <- nrow(data_2000)
+  
+  # assigning values to the table
+  desc_table_00[i, 1] <- mean
+  desc_table_00[i, 2] <- sd
+  desc_table_00[10, 1] <- obs
+  }
+
+  ## Sample boys
+for (i in 1:10){
+  
+  # mean of the column 
+  mean <- mean(subset(data_2000, boy == 1)[[desc_var[i]]])
+    
+  # standard errors of individual covariates
+  sd <- sd(subset(data_2000, boy == 1)[[desc_var[i]]])
+  
+  # number of observations
+  obs <- nrow(subset(data_2000, boy == 1))
+    
+  # assigning values to the table
+  desc_table_00[i, 3] <- mean
+  desc_table_00[i, 4] <- sd
+  desc_table_00[10, 2] <- obs
+  }
+
+  ## Sample for girls
+for (i in 1:10){
+    
+  # mean of the column 
+  mean <- mean(subset(data_2000, boy == 1)[[desc_var[i]]])
+    
+  # standard errors of individual covariates
+  sd <- sd(subset(data_2000, boy == 1)[[desc_var[i]]])
+  
+  # number of observations
+  obs <- nrow(subset(data_2000, boy == 0))
+    
+  # assigning values to the table
+  desc_table_00[i, 5] <- mean 
+  desc_table_00[i, 6] <- sd
+  desc_table_00[10, 3] <- obs
+  }
+
+# Formatting
+
+  ## Rename columns
+colnames(desc_table_00) <- c(
+  "All", "Boy sample", "Girl sample")
+
+  ## Rename rows
+rownames(desc_table_00) <- c(
+  "Bagrut rate", "Arab school", "Religious school",  "Father's education", 
+  "Mother's_education", "Number of siblings", "Immigrant",  "Lagged score", 
+  "Siblings category", "Number of observations"
+  )
+
+  ## Round values
+desc_table_00 <- round(desc_table_00, 3)
+
+# Print results
+desc_table_00
+```
+
+**Combined Descriptives Statistics Table**
+
+```{r}
+# Panel A. 2001
+  ## print standard errors beside means
+for (i in 1:9){
+  desc_table_01[i, 1] <- paste(
+    desc_table_01[i, 1], "<br>(", desc_table_01[i, 4], ")", sep = ""
+    )
+  desc_table_01[i, 2] <- paste(
+    desc_table_01[i, 2], "<br>(", desc_table_01[i, 5], ")", sep = ""
+    )
+  desc_table_01[i, 3] <- paste(
+    desc_table_01[i, 3], "<br>(", desc_table_01[i, 6], ")", sep = ""
+    )
+}
+desc_table_01[, 1] <- linebreak(desc_table_01[, 1])
+desc_table_01[, 2] <- linebreak(desc_table_01[, 2])
+desc_table_01[, 3] <- linebreak(desc_table_01[, 3])
+
+  ## remove columns of the standard errors 
+desc_table_01 <- desc_table_01[-c(4,5,6)]
+desc_table_01 
+
+
+# Panel B.2000
+  ## print standard errors beside means
+for (i in 1:9){
+  desc_table_00[i, 1] <- paste(
+    desc_table_00[i, 1], "<br>(", desc_table_00[i, 4], ")", sep = ""
+    )
+  desc_table_00[i, 2] <- paste(
+    desc_table_00[i, 2], "<br>(", desc_table_00[i, 5], ")", sep = ""
+    )
+  desc_table_00[i, 3] <- paste(
+    desc_table_00[i, 3], "<br>(", desc_table_00[i, 6], ")", sep = ""
+    )
+}
+desc_table_00[, 1] <- linebreak(desc_table_00[, 1])
+desc_table_00[, 2] <- linebreak(desc_table_00[, 2])
+desc_table_00[, 3] <- linebreak(desc_table_00[, 3])
+
+  ## remove columns of the standard errors 
+desc_table_00 <- desc_table_00[-c(4,5,6)]
+desc_table_00 
+
+
+# Merging Panel A + Panel B
+desc_table <- rbind(desc_table_01, desc_table_00)
+
+
+# Formating & Saving
+
+  ## Renaming rows
+rownames(desc_table) <- c("Bagrut rate", "Arab school", "Religious school",  
+                          "Father's education", "Mother's education", 
+                          "Number of siblings", "Immigrant",  "Lagged score", 
+                          "Siblings category", "Number of observations", 
+                          "Bagrut rate ", "Arab school ", "Religious school ",  
+                          "Father's education ", "Mother's education ", 
+                          "Number of siblings ", "Immigrant ",  
+                          "Lagged score ", "Siblings category ", 
+                          "Number of observations ")
+
+  ## Adding headlines
+desc_table %>%
+    kable(
+      format = "html",
+      size = 14,
+      escape = FALSE,
+      caption = "<b>Table 2: Descriptive Statistics</b>",
+      align = "c") %>%
+    kable_classic(
+      full_width = F, 
+      html_font = "Times New Roman", 
+      position = "left"
+      ) %>%
+    
+   # For Panel A
+    pack_rows(
+      "Panel A. 2001", 1, 2, italic = TRUE, bold = FALSE, underline = TRUE
+      ) %>%
+    pack_rows("School covariates", 2, 3, bold = TRUE) %>%
+    pack_rows("Micro covariates", 4, 10, bold = TRUE) %>%
+ 
+   # For Panel B
+    pack_rows(
+      "Panel B. 2000", 11, 12, italic = TRUE, bold = FALSE, underline = TRUE, 
+      hline_before = TRUE, hline_after = TRUE
+      ) %>%
+    pack_rows("School covariates", 12, 13, bold = TRUE) %>%
+    pack_rows("Micro covariates", 14, 19, bold = TRUE) %>%
+  
+   # Adding footnotes for table 
+  footnote(general = c(
+    "Table columns report sample means and standard deviations (shown in parentheses).",
+    "This is a replication of Table B1 (Angrist & Lavy, 2009, p. 1391)"
+    ),
+    footnote_as_chunk = T
+    ) 
+```
+
+**Conclusion:**
+
+    * Fewer observations are recorded in the year 2001 compared to 2000, which is due to the drop out of the 39th school. However, the difference is not significant and the size of the sample remains efficiently large. 
+  
+    * Number of boys and number of girls in the treatment group and control group are relatively similar and constant over year. There are no significant drop-outs.
+
+---
+
+## Univariate descriptives
+
+Data descriptive and visualization of the descriptive for each variable for all samples.
+
+```{r}
+# Immigration status 
+  # Most students are natives: 3578 compared to 243
+data_2001 %>% group_by(immigrant) %>% count()
+```
+
+
+```{r Full data}
+# Visualization
+p <- ggplot(data = data) + labs(x = "", y = "") +
+    theme_classic()
+
+# School covariates 
+grid.arrange(
+  
+  p + 
+    geom_bar(mapping = aes(factor(school_arab)), 
+             color="black", fill="white") +
+    labs(title = "School covariates distribution (All)", 
+         subtitle = "Arab school"),
+  
+  p + 
+    geom_bar(aes(factor(school_religious)), 
+             color="black", fill="white") +
+    labs(subtitle = "Religious school")
+)
+
+
+# Micro-covariates
+p1 <-  p + 
+    geom_histogram(mapping = aes(siblings), 
+                   color="black", fill="white") +
+    labs(subtitle = "Number of siblings") 
+  
+p2 <- p + 
+   geom_histogram(mapping = aes(father_educ),
+                   color="black", fill="white") +
+    labs(subtitle = "Father education (years)")
+     
+p3 <-  p + 
+    geom_histogram(mapping = aes(mother_educ),
+                   color="black", fill="white") +
+    labs(subtitle = "Mother education (years)")
+
+p4 <- p + 
+    geom_bar(mapping = aes(factor(immigrant)), 
+             color="black", fill="white") +
+    labs(subtitle = "Immigration status")
+  
+p5 <- p + 
+    geom_bar(mapping = aes(factor(siblings_4)), 
+             color="black", fill="white") +
+    labs(subtitle = "Sibling groups")
+
+p6 <- p + geom_bar(mapping = aes(factor(boy)), 
+                   color="black", fill="white") +
+                  labs(subtitle = "Gender")
+p7 <-  p + 
+    geom_histogram(mapping = aes(lagscore), 
+                   color="black", fill="white") +
+    labs(subtitle = "Lagscore")
+
+p <- ggarrange(p1, p2, p3, p4, p5, p6, p7)
+annotate_figure(p,  
+                top = text_grob("Microcovariates (Full data)",
+                color = "red", face = "bold", size = 12))
+```
+
+```{r 2001}
+# Visualization
+p <- ggplot(data = data_2001) + labs(x = "", y = "") +
+    theme_classic()
+
+# School covariates 
+grid.arrange(
+  
+  p + 
+    geom_bar(mapping = aes(factor(school_arab)), 
+             color="black", fill="white") +
+    labs(title = "School covariates distribution (2001)", 
+         subtitle = "Arab school"),
+  
+  p + 
+    geom_bar(aes(factor(school_religious)), 
+             color="black", fill="white") +
+    labs(subtitle = "Religious school")
+)
+
+
+# Micro-covariates
+p1 <-  p + 
+    geom_histogram(mapping = aes(siblings), 
+                   color="black", fill="white") +
+    labs(subtitle = "Number of siblings") 
+  
+p2 <- p + 
+   geom_histogram(mapping = aes(father_educ),
+                   color="black", fill="white") +
+    labs(subtitle = "Father education (years)")
+     
+p3 <-  p + 
+    geom_histogram(mapping = aes(mother_educ),
+                   color="black", fill="white") +
+    labs(subtitle = "Mother education (years)")
+
+p4 <- p + 
+    geom_bar(mapping = aes(factor(immigrant)), 
+             color="black", fill="white") +
+    labs(subtitle = "Immigration status")
+  
+p5 <- p + 
+    geom_bar(mapping = aes(factor(siblings_4)), 
+             color="black", fill="white") +
+    labs(subtitle = "Sibling groups")
+
+p6 <- p + geom_bar(mapping = aes(factor(boy)), 
+                   color="black", fill="white") +
+                  labs(subtitle = "Gender")
+p7 <-  p + 
+    geom_histogram(mapping = aes(lagscore), 
+                   color="black", fill="white") +
+    labs(subtitle = "Lagscore")
+
+p <- ggarrange(p1, p2, p3, p4, p5, p6, p7)
+annotate_figure(p,  
+                top = text_grob("Microcovariates (2001)",
+                color = "red", face = "bold", size = 12))
+
+```
+
+
+```{r 2000}
+# Visualization
+
+# School covariates
+p <- ggplot(data = data_2000) + labs(x = "", y = "") +
+    theme(title = element_text(size=8, face="bold")) +
+    theme_classic()
+
+# School covariates 
+grid.arrange(
+  p + 
+    geom_bar(mapping = aes(factor(school_arab)), 
+             color="black", fill="white") +
+    labs(title = "School covariates distribution (2000)", 
+         subtitle = "Arab school"),
+  
+ p + 
+    geom_bar(aes(factor(school_religious)), 
+             color="black", fill="white") +
+    labs(subtitle = "Religious school")
+)
+
+
+# Micro-covariates
+p1 <- p + geom_histogram(mapping = aes(siblings), 
+                         color="black", fill="white") + 
+                        labs(subtitle = "Number of siblings")
+  
+ 
+p2 <- p + geom_histogram(mapping = aes(father_educ),
+                         color="black", fill="white") +
+                        labs(subtitle = "Father education (years)")
+
+p3 <- p + geom_histogram(mapping = aes(mother_educ),
+                         color="black", fill="white") +
+                        labs(subtitle = "Mother education (years)")
+  
+p4 <- p + geom_bar(mapping = aes(factor(immigrant)),
+                   color="black", fill="white") +
+                  labs(subtitle = "Immigration status")
+
+p5 <- p + geom_bar(mapping = aes(factor(siblings_4)), 
+                   color="black", fill="white") +
+                  labs(subtitle = "Sibling groups")
+
+p6 <- p + geom_bar(mapping = aes(factor(boy)), 
+                   color="black", fill="white") +
+                  labs(subtitle = "Gender")
+ 
+p7 <- p + geom_histogram(mapping = aes(lagscore), 
+                   color="black", fill="white") +
+                  labs(subtitle = "Lagscore")
+
+p <- ggarrange(p1, p2, p3, p4, p5, p6, p7)
+
+annotate_figure(p, 
+                top = text_grob("Microcovariates (2000)",
+                color = "red", face = "bold", size = 12))
+```
+
+```{r}
+# Gender distribution in treated vs untreated groups
+data %>% group_by(boy, treated) %>% count()
+```
+
+---
+
+## Multivariate descriptives (Data 2001)
+
+This part specifically looks at the relationships between multivariate variables in the sample of interest, **data_2001**.
+
+  **School covariates**
+
+```{r}
+# Sibling categories in Arab and Religious school
+data_2001 %>% group_by(school_arab, siblings_4) %>% count()
+data_2001 %>% group_by(school_religious, siblings_4) %>% count()
+```
+```{r}
+p <- ggplot(data = data_2001) + 
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_discrete(labels=c("0" = "No", "1" = "Yes")) +
+  guides(fill=guide_legend(title="")) + 
+  scale_fill_discrete(labels = c("Fewer than 4","At least 4")) +
+  theme_classic()
+
+# Different graphs for 2 school types
+p1 <- p + geom_bar(aes(x = factor(school_arab), 
+                   y = ..count.. / sum(..count..),
+                   fill = factor(siblings_4)),
+                   position="fill") + 
+      labs(x = "",
+           y = "",
+           subtitle = "Arab schools")
+
+p2 <- p + geom_bar(aes(x = factor(school_religious), 
+                   y = ..count.. / sum(..count..),
+                   fill = factor(siblings_4)),
+              position="fill") + 
+      labs(subtitle = "Religious schools",
+           x = "",
+           y = "")
+
+p <- ggarrange(p1, p2, common.legend = T, legend="bottom")
+
+annotate_figure(p, 
+                top = text_grob("Sibling groups by school type (%)",
+                color = "red", face = "bold", size = 12))
+```
+
+
+  **Micro covariates**
+
+```{r Parental education}
+# Schooling of mother and father in 2 sibling categories
+data_2001 %>% group_by(father_educ, siblings_4) %>% count()
+```
+
+```{r}
+# Visualization
+# Comparing school levels of mother and father between 2 sibling groups
+p1 <- ggplot(data = data_2001,
+       aes(x = factor(father_educ), 
+           y = ..count.., 
+           fill = factor(siblings_4))) + 
+  geom_bar(position = "dodge" ) +
+  labs(subtitle = "Father education", 
+       x = "", y = "") +
+  guides(fill=guide_legend(title="")) + 
+  scale_fill_discrete(labels = c("Fewer than 4","At least 4")) +
+  theme_classic()
+
+p2 <- ggplot(data = data_2001,
+       aes(x = factor(mother_educ), 
+           y = ..count.., 
+           fill = factor(siblings_4))) + 
+  geom_bar(position = "dodge" ) +
+  labs(subtitle = "Mother education", 
+       x = "", y = "") +
+  theme_classic()
+
+p <- ggarrange(p1, p2, common.legend = T, legend="bottom", nrow = 2)
+
+annotate_figure(p, 
+                top = text_grob("Parental education (years)",
+                color = "red", face = "bold", size = 12))
+```
+
+```{r Immigrantion status}
+# Sibling categories between immigrants and natives
+data_2001 %>% group_by(immigrant, siblings_4) %>% count()
+```
+
+
+```{r}
+# Visualization
+p <- ggplot(data = data_2001, 
+       aes(x = factor(immigrant), 
+           y = ..count.. / sum(..count..),
+           fill = factor(siblings_4))) + 
+  geom_bar(position="fill") +
+  labs(x = "",
+       y = "") +
+  scale_y_continuous(labels = scales::percent) +
+  guides(fill=guide_legend(title="")) +
+  scale_fill_discrete(labels = c("Fewer than 4","At least 4")) +
+  scale_x_discrete(labels=c("0" = "Girls", "1" = "Boys")) +
+  theme(legend.position="bottom") +
+  theme_classic()
+
+annotate_figure(p, 
+                top = text_grob("Family size of immigrants and natives",
+                color = "red", face = "bold", size = 12))
+```
+
+
+```{r Gender}
+# Gender distribution in 2 siblings categories
+data_2001 %>% group_by(boy, siblings_4) %>% count()
+data_2001 %>% group_by(boy) %>% count()
+```
+
+```{r}
+# Visualization
+p <- ggplot(data_2001, 
+       aes(x = factor(boy), 
+           y = ..count..,
+           fill = factor(siblings_4))) +
+  geom_bar() + 
+  labs(x = "", 
+       y = "") +
+  guides(fill=guide_legend(title="")) + 
+  scale_fill_discrete(labels = c("Fewer than 4","At least 4")) +
+  scale_x_discrete(labels=c("0" = "Girls", "1" = "Boys")) +
+  theme_classic()
+
+annotate_figure(p, 
+                top = text_grob("Family size between gender",
+                color = "red", face = "bold", size = 12))
+```
+
+Students with at least 4 siblings have lower lagscore performance. However, this can be due to the size of the two sibling categories - there are more observations for the group that has fewer siblings.
+
+```{r Lagscore}
+# Lagscore distribution in 2 siblings groups
+list ("fewer than 4 siblings" = with(data_2001 %>% 
+                                       filter(siblings_4 == 0), 
+                                     summary(lagscore)),
+      
+      "at least 4 siblings" = with(data_2001 %>% 
+                               filter(siblings_4 == 1), 
+                               summary(lagscore)))
+```
+
+```{r}
+# Visualization
+p <- ggplot(data_2001, 
+       aes(x = factor(siblings_4), y = lagscore, 
+           fill = factor(siblings_4))) +
+  geom_boxplot() + 
+  labs(x = "",
+       y = "") +
+  guides(fill=guide_legend(title="")) + 
+  scale_fill_discrete(labels = c("Fewer than 4","At least 4")) + 
+  scale_x_discrete(labels=c("0" = "", "1" = "")) +
+  theme_minimal()
+
+annotate_figure(p, 
+                top = text_grob("Lag score per sibling category",
+                color = "red", face = "bold", size = 12))
+```
+
+
+  **Correlation Matrices**
+
+We draw correlation matrices for all numeric variables in the data_2001. A correlation plot of variables used for the regression in **Table 2: Panel_2001** and several correlation suplots are the provided to describe the relationship between school covariates and micro covariates to the outcome variable.
+
+We observe that:
+
+    * Moderately negative correlations between parents' education and number of children (siblings)
+    
+    * Correlation between number of siblings and bagrut status is almost 0.
+    
+    * A weakly negative relation between family size and students' lagged scores.
+    
+
+```{r Correlation table}
+# Pearson correlation
+cor_data_2001 <- data_2001 %>% 
+  mutate(sib_category = as.numeric(sib_category)) %>%
+  select (-c("pair", "school_id", "year")) %>% 
+  cor() %>%
+  round(4)
+```
+
+```{r}
+# Correlation plot for all numeric variables in data_2001
+corPlot(cor_data_2001,
+        main = "Correlation",
+        cex = 0.5,
+        xlas = 2)
+```
+
+```{r}
+# Correlation plot for variables of interest in data_2001
+corPlot(data_2001 %>% 
+          select(treated, school_religious, school_arab, 
+                 boy, immigrant, father_educ, mother_educ,  
+                 bagrut_status, lagscore, siblings_4, 
+                 ls_25, ls_50, ls_75, ls_100),
+        main = "Correlation",
+        cex = 0.5,
+        xlas = 2)
+```
+
+```{r}
+# Correlation subplots
+
+  # School covariates
+corPlot(data_2001 %>% 
+          select(bagrut_status, treated, school_religious, school_arab),
+        main = "School covariates", 
+        cex = 0.5)
+
+  # Micro covariates
+corPlot(data_2001 %>% 
+          select(bagrut_status, treated, boy, immigrant, 
+                 father_educ, mother_educ,  
+                 bagrut_status, lagscore, siblings_4, 
+                 ls_25, ls_50, ls_75, ls_100
+                 ),
+        main = "Micro covariates",
+        cex = 0.5,
+        xlas = 2)
+```
+
+---

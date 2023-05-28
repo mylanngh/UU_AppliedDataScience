@@ -1,0 +1,4437 @@
+---
+title: 'Section 6: Results'
+author: "Lan Nguyen (6687547) | Lisa Verlare (6929699) | Nguyen Thuy Duong (6827209)"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+```{r packages, include=FALSE}
+library(haven)
+library(tidyverse)
+library(dplyr)
+library(clubSandwich)
+library(kableExtra)
+library(vtable)
+library(ggpubr)
+library(gridExtra)
+library(ggplot2)
+library(Hmisc) # statistic table format 
+library(strucchange)  #Chow test
+library(margins) # logit marginal effect
+library(sandwich) # correct downward-biased standard errors
+library(corrplot)
+library(RColorBrewer)
+library(webshot)
+#webshot::install_phantomjs()
+library(magick)
+library(psych)
+library(ggpubr)
+```
+
+```{r}
+# loading the data sets into the environment
+data_1999 <- readRDS(file = "data/data_1999.Rda")
+data_2000 <- readRDS(file = "data/data_2000.Rda")
+data_2001 <- readRDS(file = "data/data_2001.Rda")
+data_2002 <- readRDS(file = "data/data_2002.Rda")
+ls_bot_boy_dta <- readRDS(file = "data/ls_bot_boy_dta.Rda")
+ls_top_boy_dta <- readRDS(file = "data/ls_top_boy_dta.Rda")
+ls_top_girl_dta <- readRDS(file = "data/ls_top_girl_dta.Rda")
+ls_bot_girl_dta <- readRDS(file = "data/ls_bot_girl_dta.Rda")
+p_bot_boy_dta <- readRDS(file = "data/p_bot_boy_dta.Rda")
+p_top_boy_dta <- readRDS(file = "data/p_top_boy_dta.Rda")
+p_top_girl_dta <- readRDS(file = "data/p_top_girl_dta.Rda")
+p_bot_girl_dta <- readRDS(file = "data/p_bot_girl_dta.Rda")
+```
+
+# Table 5. Treatment Effects
+
+    This is the replication of Table B2.
+
+We first define all the models we need to run
+```{r}
+table2_models_all_ols <- c(
+  "bagrut_status ~ treated + school_arab + school_religious",
+  "bagrut_status ~ treated + school_arab + school_religious + pair",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+  father_educ + mother_educ + ls_50 + ls_75 + ls_100",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + pair"
+)
+
+table2_models_boys_ols <- c(
+  "bagrut_status ~ treated + school_arab + school_religious",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100"
+  )
+
+table2_models_girls_ols <- c(
+  "bagrut_status ~ treated + school_arab + school_religious", 
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100"
+  )
+```
+
+## 2001
+Now we will create all the different values that are not part of the models.
+```{r}
+# a vector containing the pair effects
+pairs_effects <- c(" ", "No", "Yes", "No", "Yes", " ", " ")
+
+# a vector containing all the means
+means <- c(
+  mean(data_2001$bagrut_status), mean(data_2001$bagrut_status), 
+  mean(subset(data_2001, boy == 1)$bagrut_status), 
+  mean(subset(data_2001, boy == 1)$bagrut_status), 
+  mean(subset(data_2001, boy == 0)$bagrut_status), 
+  mean(subset(data_2001, boy == 0)$bagrut_status)
+  )
+means <- round(means, 3)
+# a vector containing all the number of observations
+observations <- c(
+  nrow(data_2001), nrow(data_2001), nrow(subset(data_2001, boy == 1)),
+  nrow(subset(data_2001, boy == 1)), nrow(subset(data_2001, boy == 0)),
+  nrow(subset(data_2001, boy == 0))
+  )
+
+# a vector containing all the number of schools
+number_schools <- c(
+  length(unique(data_2001$school_id)), length(unique(data_2001$school_id)), 
+  length(unique(subset(data_2001, boy == 1)$school_id)), 
+  length(unique(subset(data_2001, boy == 1)$school_id)),  
+  length(unique(subset(data_2001, boy == 0)$school_id)),  
+  length(unique(subset(data_2001, boy == 0)$school_id))
+)
+```
+
+
+```{r}
+# creating the data frame where the values will be saved
+table_2_replication <- data.frame(NULL)
+```
+
+
+Next, we will create different for loops that will iterate over the different models that are being calculated
+
+**Boys + Girls**
+
+```{r}
+# OLS
+
+for(i in 1:4){
+  
+  # OLS regression
+  model <- lm(
+    formula = as.formula(paste(table2_models_all_ols[[i]])), 
+    data = data_2001
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(obj = model, cluster = data_2001$school_id, vcov = "CR2")
+  
+  # assigning values to the table
+  table_2_replication[i, 1] <- y[2, 2]
+  table_2_replication[i, 2] <- y[2, 3]
+}
+```
+
+```{r}
+# Logit
+
+for(i in 1:4){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(table2_models_all_ols[[i]])), 
+    data = data_2001,
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(obj = model, cluster = data_2001$school_id, type = "CR2")
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_2_replication[i, 3] <- logit[1, 2]
+  table_2_replication[i, 4] <- logit[1, 3]
+}
+```
+
+---
+
+**Boys**
+
+```{r}
+# OLS
+
+k = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    formula = as.formula(paste(table2_models_boys_ols[[i]])), 
+    data = subset(data_2001, boy == 1)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_replication[k, 5] <- y[2, 2]
+  table_2_replication[k, 6] <- y[2, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  k = k + 2
+}
+```
+
+```{r}
+# Logit
+
+k = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(table2_models_boys_ols[[i]])), 
+    data = subset(data_2001, boy == 1),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+      model = model, 
+      vcov = V_CR2, 
+      variables = "treated", 
+      type = "response"
+      ) %>% 
+      summary()
+    
+  # assigning values to the table
+  table_2_replication[k, 7] <- logit[1, 2]
+  table_2_replication[k, 8] <- logit[1, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  k = k + 2
+}
+
+
+```
+
+---
+
+**Girls**
+
+```{r}
+# OLS
+
+m = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    formula = as.formula(paste(table2_models_girls_ols[[i]])), 
+    data = subset(data_2001, boy == 0)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 0)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_replication[m, 9] <- y[2, 2]
+  table_2_replication[m, 10] <- y[2, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  m = m + 2
+}
+```
+
+```{r}
+# Logit
+
+m = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(table2_models_boys_ols[[i]])), 
+    data = subset(data_2001, boy == 0),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2001, boy == 0)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+      model = model, 
+      vcov = V_CR2, 
+      variables = "treated", 
+      type = "response"
+      ) %>% 
+      summary()
+  
+  # assigning values to the table
+  table_2_replication[m, 11] <- logit[1, 2]
+  table_2_replication[m, 12] <- logit[1, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  m = m + 2
+}
+```
+
+
+Next, we work on the aesthetics of our table and will bind the separate values of dependent variable means, number of observations and schools etc. together.
+
+We will then also merge the estimates with standard coefficients and clean up the NAs.
+
+```{r}
+# renaming the data frame columns
+colnames(table_2_replication) <- c(
+  "OLS All","SE All", "Logit All", "SE All",
+  "OLS Boys", "SE Boys", "Logit Boys", "SE Boys",
+  "OLS Girls", "SE Girls", "Logit Girls", "SE Girls"
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_2_replication <- round(table_2_replication, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:4){
+  table_2_replication[i, 1] <- paste(
+    table_2_replication[i, 1], "<br>(", table_2_replication[i, 2], ")", 
+    sep = ""
+    )
+  table_2_replication[i, 3] <- paste(
+    table_2_replication[i, 3], "<br>(", table_2_replication[i, 4], ")", 
+    sep = ""
+    )
+  table_2_replication[i, 5] <- paste(
+    table_2_replication[i, 5], "<br>(", table_2_replication[i, 6], ")", 
+    sep = ""
+    )
+  
+  table_2_replication[i, 7] <- paste(
+    table_2_replication[i, 7], "<br>(", table_2_replication[i, 8], ")", 
+    sep = ""
+    )
+  
+  table_2_replication[i, 9] <- paste(
+    table_2_replication[i, 9], "<br>(", table_2_replication[i, 10], ")", 
+    sep = ""
+    )
+  
+  table_2_replication[i, 11] <- paste(
+    table_2_replication[i, 11], "<br>(", table_2_replication[i, 12], ")", 
+    sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_2_replication[, 1] <- linebreak(table_2_replication[, 1])
+table_2_replication[, 3] <- linebreak(table_2_replication[, 3])
+table_2_replication[, 5] <- linebreak(table_2_replication[, 5])
+table_2_replication[, 7] <- linebreak(table_2_replication[, 7])
+table_2_replication[, 9] <- linebreak(table_2_replication[, 9])
+table_2_replication[, 11] <- linebreak(table_2_replication[, 11])
+
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_2_replication <- table_2_replication %>%
+  select(-2, -4, -6, -8, -10, -12) 
+
+# Adding in all the earlier created vectors by row
+table_2_replication <- rbind(
+  means, table_2_replication, observations, number_schools
+  )
+
+# Adding in the pair effects vector by column
+table_2_replication <- cbind(pairs_effects, table_2_replication)
+
+
+# Naming the rows
+rownames(table_2_replication) <- c(
+  "Dependent Variable Mean", "Model 1", "Model 2", "Model 3", "Model 4",
+  "Number of Students", "Number of Schools"
+  )
+
+# removing any values from the cells that do not have any values
+table_2_replication[table_2_replication == "NA<br>(NA)"] <- "—"
+```
+
+## 2000
+
+Now we will create all the different values that are not part of the models.
+
+```{r}
+# a vector containing the pair effects
+pairs_effects <- c(" ", "No", "Yes", "No", "Yes", " ", " ")
+
+# a vector containing all the means
+means_2000 <- c(
+  mean(data_2000$bagrut_status), mean(data_2000$bagrut_status), 
+  mean(subset(data_2000, boy == 1)$bagrut_status), 
+  mean(subset(data_2000, boy == 1)$bagrut_status), 
+  mean(subset(data_2000, boy == 0)$bagrut_status), 
+  mean(subset(data_2000, boy == 0)$bagrut_status)
+  )
+
+means_2000 <- round(means_2000, 3)
+
+# a vector containing all the number of observations
+observations_2000 <- c(
+  nrow(data_2000), nrow(data_2000), nrow(subset(data_2000, boy == 1)),
+  nrow(subset(data_2000, boy == 1)), nrow(subset(data_2000, boy == 0)),
+  nrow(subset(data_2000, boy == 0))
+  )
+
+# a vector containing all the number of schools
+number_schools_2000 <- c(
+  length(unique(data_2001$school_id)), length(unique(data_2000$school_id)), 
+  length(unique(subset(data_2000, boy == 1)$school_id)), 
+  length(unique(subset(data_2000, boy == 1)$school_id)),  
+  length(unique(subset(data_2000, boy == 0)$school_id)),  
+  length(unique(subset(data_2000, boy == 0)$school_id))
+)
+```
+
+```{r table2 2000}
+# creating the data frame where the values will be saved
+table_2_replication_2000 <- data.frame(NULL)
+``` 
+
+Next, we will create different for loops that will iterate over the different models that are being calculated.
+
+**Boys + Girls**
+
+```{r}
+# OLS
+
+for(i in 1:4){
+  
+  # OLS regression
+  model <- lm(
+    formula = as.formula(paste(table2_models_all_ols[[i]])), 
+    data = data_2000
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(obj = model, cluster = data_2000$school_id, vcov = "CR2")
+  
+  # assigning values to the table
+  table_2_replication_2000[i, 1] <- y[2, 2]
+  table_2_replication_2000[i, 2] <- y[2, 3]
+}
+```
+
+```{r}
+# Logit
+
+for(i in 1:4){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(table2_models_all_ols[[i]])), 
+    data = data_2000,
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(obj = model, cluster = data_2000$school_id, type = "CR2")
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_2_replication_2000[i, 3] <- logit[1, 2]
+  table_2_replication_2000[i, 4] <- logit[1, 3]
+}
+
+```
+
+---
+
+**Boys**
+
+```{r}
+# OLS
+
+k = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    formula = as.formula(paste(table2_models_boys_ols[[i]])), 
+    data = subset(data_2000, boy == 1)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2000, boy == 1)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_replication_2000[k, 5] <- y[2, 2]
+  table_2_replication_2000[k, 6] <- y[2, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  k = k + 2
+}
+```
+
+```{r}
+# Logit
+
+k = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(table2_models_boys_ols[[i]])), 
+    data = subset(data_2000, boy == 1),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2000, boy == 1)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_2_replication_2000[k, 7] <- logit[1, 2]
+  table_2_replication_2000[k, 8] <- logit[1, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  k = k + 2
+}
+
+```
+
+---
+
+**Girls**
+
+```{r}
+# OLS
+
+m = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    formula = as.formula(paste(table2_models_girls_ols[[i]])), 
+    data = subset(data_2000, boy == 0)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2000, boy == 0)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_replication_2000[m, 9] <- y[2, 2]
+  table_2_replication_2000[m, 10] <- y[2, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  m = m + 2
+}
+```
+
+```{r}
+# Logit
+
+m = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(table2_models_boys_ols[[i]])), 
+    data = subset(data_2000, boy == 0),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2000, boy == 0)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+    
+  # assigning values to the table
+  table_2_replication_2000[m, 11] <- logit[1, 2]
+  table_2_replication_2000[m, 12] <- logit[1, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  m = m + 2
+}
+```
+
+
+Next, we work on the aesthetics of our table and will bind the separate values of dependent variable means, number of observations and schools etc. together.
+
+We will then also merge the estimates with standard coefficients and clean up the NAs.
+
+```{r}
+# renaming the data frame for clarity
+colnames(table_2_replication_2000) <- c(
+  "OLS All","SE All", "Logit All", "SE All",
+  "OLS Boys", "SE Boys", "Logit Boys", "SE Boys",
+  "OLS Girls", "SE Girls", "Logit Girls", "SE Girls"
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_2_replication_2000 <- round(table_2_replication_2000, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:4){
+  table_2_replication_2000[i, 1] <- paste(
+    table_2_replication_2000[i, 1], "<br>(", 
+    table_2_replication_2000[i, 2], ")", 
+    sep = ""
+    )
+  table_2_replication_2000[i, 3] <- paste(
+    table_2_replication_2000[i, 3], "<br>(", 
+    table_2_replication_2000[i, 4], ")", 
+    sep = ""
+    )
+  table_2_replication_2000[i, 5] <- paste(
+    table_2_replication_2000[i, 5], "<br>(", 
+    table_2_replication_2000[i, 6], ")", 
+    sep = ""
+    )
+  
+  table_2_replication_2000[i, 7] <- paste(
+    table_2_replication_2000[i, 7], "<br>(", 
+    table_2_replication_2000[i, 8], ")", 
+    sep = ""
+    )
+  
+  table_2_replication_2000[i, 9] <- paste(
+    table_2_replication_2000[i, 9], "<br>(", 
+    table_2_replication_2000[i, 10], ")", 
+    sep = ""
+    )
+  
+  table_2_replication_2000[i, 11] <- paste(
+    table_2_replication_2000[i, 11], "<br>(", 
+    table_2_replication_2000[i, 12], ")", 
+    sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_2_replication_2000[, 1] <- linebreak(table_2_replication_2000[, 1])
+table_2_replication_2000[, 3] <- linebreak(table_2_replication_2000[, 3])
+table_2_replication_2000[, 5] <- linebreak(table_2_replication_2000[, 5])
+table_2_replication_2000[, 7] <- linebreak(table_2_replication_2000[, 7])
+table_2_replication_2000[, 9] <- linebreak(table_2_replication_2000[, 9])
+table_2_replication_2000[, 11] <- linebreak(table_2_replication_2000[, 11])
+
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_2_replication_2000 <- table_2_replication_2000 %>%
+  select(-2, -4, -6, -8, -10, -12) 
+
+# Adding in all the earlier created vectors by row
+table_2_replication_2000 <- rbind(
+  means_2000, table_2_replication_2000, observations_2000, number_schools_2000
+  )
+# Adding in the pair effects vector by column
+table_2_replication_2000 <- cbind(pairs_effects, table_2_replication_2000)
+
+# Naming the rows
+rownames(table_2_replication_2000) <- c(
+  "Dependent Variable Mean ", "Model 1 ", "Model 2 ", "Model 3 ", "Model 4 ",
+  "Number of Students ", "Number of Schools "
+  )
+
+# removing any values from the cells that do not have any values
+table_2_replication_2000[table_2_replication_2000 == "NA<br>(NA)"] <- "—"
+``` 
+
+Lastly, we reproduce the table
+
+```{r}
+# Merging the tables for each year into one table
+table_2_replication_both <- rbind(table_2_replication, table_2_replication_2000)
+
+# Creating the table
+table_2_replication_both %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 5: Treatment Effects</b>",
+    col.names = c(
+      "Pair Effects", "OLS", "Logit", "OLS", "Logit", "OLS", "Logit"
+      ),
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left"
+    ) %>%
+  add_header_above(c(" " = 1, " " = 1, "All" = 2, "Boys" = 2, "Girls" = 2)) %>%
+  
+  # Panel A
+  pack_rows("Year: 2001", 1, 7, italic = TRUE, bold = FALSE) %>%
+  pack_rows("School Covariates", 2, 3) %>%
+  pack_rows("School Covariates, Quartile Dummies, Micro Covariates", 4, 5) %>%
+  
+  # Panel B
+  pack_rows("Year: 2000", 8, 14, italic = TRUE, bold = FALSE) %>%
+  pack_rows("School Covariates", 9, 10) %>%
+  pack_rows("School Covariates, Quartile Dummies, Micro Covariates", 11, 12) %>%
+  
+  # Adding footnotes for the table
+  footnote(
+    general = c(
+      "This table reports both OLS and logit estimates, i.e., marginal effects. The estimates in this table were constructed using the samples from 2001 and 2000. BRL standard errors are reported in parantheses.",
+      "This is a replication of Table B2 (Angrist & Lavy, 2009, p. 1394)"
+      ), 
+    footnote_as_chunk = T
+  )
+
+```
+
+---
+
+# Table 6. Treatment Effects in Covariate Subgroups
+
+    This is the replication of Table B4.
+    
+Now we will recreate different for loops that will iterate over the different models that are being calculated. We do this for the classification **lagged score** and **predicted probability**.
+
+## Classified By Lagged Score
+
+We first define all the models we need to run
+```{r}
+table4_models_top <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + ls_75",
+  "bagrut_status ~ treated + school_arab + school_religious + ls"
+)
+
+table4_models_bot <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + ls_25",
+  "bagrut_status ~ treated + school_arab + school_religious + ls"
+)
+```
+
+```{r}
+# creating the data frame where the values will be saved
+table_4_2001_replication <- data.frame(NULL)
+```
+
+```{r}
+for(i in 1:2){
+  # models for boys in top group
+  
+  # Logit regression
+  model1_boy_top <- glm(
+    formula = as.formula(paste(table4_models_top[[i]])), 
+    family = binomial(link = "logit"),
+    data = ls_top_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_top, 
+    cluster = ls_top_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication[i + 1, 1] <- logit[1, 2]
+  table_4_2001_replication[i + 1, 2] <- logit[1, 3]
+  
+  # models for boys in bottom group
+  
+  # Logit regression
+  model1_boy_bot <- glm(
+    formula = as.formula(paste(table4_models_bot[[i]])), 
+    family = binomial(link = "logit"),
+    data = ls_bot_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_bot, 
+    cluster = ls_bot_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication[i + 1, 3] <- logit[1, 2]
+  table_4_2001_replication[i + 1, 4] <- logit[1, 3]
+  
+  # models for girls in top group
+  
+  # Logit regression
+  model1_girl_top <- glm(
+    formula = as.formula(paste(table4_models_top[[i]])), 
+    family = binomial(link = "logit"),
+    data = ls_top_girl_dta
+    )
+  
+  # Standard errors are adjusted with BRL  
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top, 
+    cluster = ls_top_girl_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication[i + 1, 5] <- logit[1, 2]
+  table_4_2001_replication[i + 1, 6] <- logit[1, 3]
+  
+  # models for girls in bottom group
+  
+  # Logit regression
+    model1_girl_bot <- glm(
+      formula = as.formula(paste(table4_models_bot[[i]])), 
+      family = binomial(link = "logit"),
+      data = ls_bot_girl_dta
+      )
+    
+    # Standard errors are adjusted with BRL
+    V_CR2 <- vcovCR(
+      obj = model1_girl_bot, 
+      cluster = ls_bot_girl_dta$school_id,
+      type = "CR2"
+      )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication[i + 1, 7] <- logit[1, 2]
+  table_4_2001_replication[i + 1, 8] <- logit[1, 3]
+}
+
+```
+
+Then we work on the aesthetics of our table. we will name both the columns as rows and also merge the estimates with standard coefficients and clean up the NAs.
+```{r}
+# renaming the data frame for clarity
+colnames(table_4_2001_replication) <- c(
+  "Top", "SE", "Bottom", "SE ", "Top ", " SE", "Bottom ", " SE "
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_4_2001_replication <- round(table_4_2001_replication, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 2:3){
+  table_4_2001_replication[i, 1] <- paste(
+    table_4_2001_replication[i, 1], "<br>(", 
+    table_4_2001_replication[i, 2], ")", 
+    sep = ""
+    )
+  table_4_2001_replication[i, 3] <- paste(
+    table_4_2001_replication[i, 3], "<br>(", 
+    table_4_2001_replication[i, 4], ")", 
+    sep = ""
+    )
+  table_4_2001_replication[i, 5] <- paste(
+    table_4_2001_replication[i, 5], "<br>(", 
+    table_4_2001_replication[i, 6], ")", 
+    sep = ""
+    )
+  
+  table_4_2001_replication[i, 7] <- paste(
+    table_4_2001_replication[i, 7], "<br>(", 
+    table_4_2001_replication[i, 8], ")", 
+    sep = ""
+    )
+  
+
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_4_2001_replication[, 1] <- linebreak(table_4_2001_replication[, 1])
+table_4_2001_replication[, 3] <- linebreak(table_4_2001_replication[, 3])
+table_4_2001_replication[, 5] <- linebreak(table_4_2001_replication[, 5])
+table_4_2001_replication[, 7] <- linebreak(table_4_2001_replication[, 7])
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_4_2001_replication <- table_4_2001_replication %>%
+  select(-2, -4, -6, -8) 
+```
+
+Next, we will add the different mean and observation values to the data frame. 
+```{r}
+# Dependent Variable Mean
+table_4_2001_replication[1, 1] <- round(mean(ls_top_boy_dta$bagrut_status), 3)
+table_4_2001_replication[1, 2] <- round(mean(ls_bot_boy_dta$bagrut_status), 3)
+table_4_2001_replication[1, 3] <- round(mean(ls_top_girl_dta$bagrut_status), 3)
+table_4_2001_replication[1, 4] <- round(mean(ls_bot_girl_dta$bagrut_status), 3)
+
+# Number of observations per group
+table_4_2001_replication[4, 1] <- nrow(ls_top_boy_dta)
+table_4_2001_replication[4, 2] <- nrow(ls_bot_boy_dta)
+table_4_2001_replication[4, 3] <- nrow(ls_top_girl_dta)
+table_4_2001_replication[4, 4] <- nrow(ls_bot_girl_dta)
+
+# renaming the rows
+rownames(table_4_2001_replication) <- c(
+  "Dependent Variable Mean", "School Covariates, Quartile dummies", 
+  "School Covariates, Linear Lagged Score or Predicted Prob.", 
+  "Number of Students"
+  )
+
+```
+
+---
+
+## Classified By Predicted Probability
+
+We first define all the models we need to run
+
+```{r}
+table4_models_top_prob <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + p_75",
+  "bagrut_status ~ treated + school_arab + school_religious + p"
+)
+
+table4_models_bot_prob <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + p_25",
+  "bagrut_status ~ treated + school_arab + school_religious + p"
+)
+```
+
+```{r}
+# creating the data frame where the values will be saved
+table_4_2001_replication_prob <- data.frame(NULL)
+```
+
+```{r}
+for(i in 1:2){
+  ## models for boys in top group
+  
+  # Logit regression
+  model1_boy_top <- glm(
+    formula = as.formula(paste(table4_models_top_prob[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_top_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_top, 
+    cluster = p_top_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication_prob[i + 1, 1] <- logit[1, 2]
+  table_4_2001_replication_prob[i + 1, 2] <- logit[1, 3]
+  
+  ## models for boys in bottom group
+  
+  # Logit regression
+  model1_boy_bot <- glm(
+    formula = as.formula(paste(table4_models_bot_prob[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_bot_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_bot, 
+    cluster = p_bot_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication_prob[i + 1, 3] <- logit[1, 2]
+  table_4_2001_replication_prob[i + 1, 4] <- logit[1, 3]
+  
+  ## models for girls in top group
+  
+  # Logit regression
+  model1_girl_top <- glm(
+    formula = as.formula(paste(table4_models_top_prob[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_top_girl_dta
+    )
+   
+  # Standard errors are adjusted with BRL 
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top, 
+    cluster = p_top_girl_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication_prob[i + 1, 5] <- logit[1, 2]
+  table_4_2001_replication_prob[i + 1, 6] <- logit[1, 3]
+  
+  ## models for girls in bottom group
+  
+  # Logit regression
+  model1_girl_bot <- glm(
+    formula = as.formula(paste(table4_models_bot_prob[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_bot_girl_dta
+    )
+  
+  # Standard errors are adjusted with BRL  
+  V_CR2 <- vcovCR(
+    obj = model1_girl_bot, 
+    cluster = p_bot_girl_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_2001_replication_prob[i + 1, 7] <- logit[1, 2]
+  table_4_2001_replication_prob[i + 1, 8] <- logit[1, 3]
+}
+```
+
+Then we work on the aesthetics of our table. We will name both the columns as rows and also merge the estimates with standard coefficients and clean up the NAs.
+```{r}
+# renaming the data frame for clarity
+colnames(table_4_2001_replication_prob) <- c(
+  "Top", "SE", "Bottom", "SE ", "Top ", " SE", "Bottom ", " SE "
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_4_2001_replication_prob <- round(table_4_2001_replication_prob, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 2:3){
+  table_4_2001_replication_prob[i, 1] <- paste(
+    table_4_2001_replication_prob[i, 1], "<br>(", 
+    table_4_2001_replication_prob[i, 2], ")", 
+    sep = ""
+    )
+  table_4_2001_replication_prob[i, 3] <- paste(
+    table_4_2001_replication_prob[i, 3], "<br>(", 
+    table_4_2001_replication_prob[i, 4], ")", 
+    sep = ""
+    )
+  table_4_2001_replication_prob[i, 5] <- paste(
+    table_4_2001_replication_prob[i, 5], "<br>(", 
+    table_4_2001_replication_prob[i, 6], ")", 
+    sep = ""
+    )
+  
+  table_4_2001_replication_prob[i, 7] <- paste(
+    table_4_2001_replication_prob[i, 7], "<br>(", 
+    table_4_2001_replication_prob[i, 8], ")", 
+    sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_4_2001_replication_prob[, 1] <- linebreak(
+  table_4_2001_replication_prob[, 1]
+  )
+table_4_2001_replication_prob[, 3] <- linebreak(
+  table_4_2001_replication_prob[, 3]
+  )
+table_4_2001_replication_prob[, 5] <- linebreak(
+  table_4_2001_replication_prob[, 5]
+  )
+table_4_2001_replication_prob[, 7] <- linebreak(
+  table_4_2001_replication_prob[, 7]
+  )
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_4_2001_replication_prob <- table_4_2001_replication_prob %>%
+  select(-2, -4, -6, -8) 
+```
+
+Next, we will add the different mean and observation values to the data frame. 
+```{r}  
+# Dependent Variable Mean
+table_4_2001_replication_prob[1, 1] <- round(
+  mean(p_top_boy_dta$bagrut_status), 3
+  )
+table_4_2001_replication_prob[1, 2] <- round(
+  mean(p_bot_boy_dta$bagrut_status), 3
+  )
+table_4_2001_replication_prob[1, 3] <- round(
+  mean(p_top_girl_dta$bagrut_status), 3
+  )
+table_4_2001_replication_prob[1, 4] <- round(
+  mean(p_bot_girl_dta$bagrut_status), 3
+  )
+
+# Number of observations per group
+table_4_2001_replication_prob[4, 1] <- nrow(p_top_boy_dta)
+table_4_2001_replication_prob[4, 2] <- nrow(p_bot_boy_dta)
+table_4_2001_replication_prob[4, 3] <- nrow(p_top_girl_dta)
+table_4_2001_replication_prob[4, 4] <- nrow(p_bot_girl_dta)
+
+# renaming the rows
+rownames(table_4_2001_replication_prob) <- c(
+  "Dependent Variable Mean", "School Covariates, Quartile dummies", 
+  "School Covariates, Linear Lagged Score or Predicted Prob.", 
+  "Number of Students"
+  )
+```
+
+```{r table 4: table}
+# Merging the tables for each classification into one table
+table_4_replication_both <- cbind(
+  table_4_2001_replication, table_4_2001_replication_prob
+  )
+
+table_4_replication_both %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 6: Treatment Effects in Covariate Subgroups</b>",
+    col.names = c(
+      "Top", "Bottom", "Top", "Bottom", "Top", "Bottom", "Top", "Bottom"
+      ),
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left"
+    ) %>%
+  add_header_above(
+    c(" " = 1, "Boys" = 2, "Girls" = 2, "Boys" = 2, "Girls"= 2)
+    ) %>%
+  
+  # Classification header
+  add_header_above(
+    c(" " = 1, "By lagged score" = 4, "By predicted probability " = 4)
+    ) %>%
+  
+  # Panel A
+  pack_rows("Year: 2001", 1, 4, italic = TRUE, bold = FALSE) %>%
+  pack_rows("Models with:", 2, 3) %>%
+  
+  # Adding footnotes for the table
+  footnote(
+    general = c(
+      "This table reports logit estimates, i.e., marginal effects. The estimates in this table were constructed using the sample of 2001. BRL standard errors are reported in parantheses.",
+      "This is a replication of Table B4 (Angrist & Lavy, 2009, p. 1398)"
+      ),
+    footnote_as_chunk = T
+  )
+
+```
+
+---
+
+# Table C1. Robustness Check of Table 6
+
+    This is to produce the results for Table C1.
+    
+For Table 6 we do a robustness check in order to determine if the results will change when we change something in the specification. 
+
+## Classified By Lagged Score
+
+We check for the models:
+* bagrut_status ~ treated + school_arab + school_religious + ls_75
+* bagrut_status ~ treated + school_arab + school_religious + ls
+
+To check the robustness we remove a regressor. In this case we remove the regressor *school_arab*.
+
+
+```{r}
+# models we want to test
+model_robust_top_ls <- c(
+  "bagrut_status ~ treated + school_religious + ls_75",
+  "bagrut_status ~ treated + school_religious + ls"
+)
+
+model_robust_bot_ls <- c(
+  "bagrut_status ~ treated + school_religious + ls_75",
+  "bagrut_status ~ treated + school_religious + ls"
+)
+```
+
+```{r}
+# creating the data frame where the values will be saved
+table_4_robust <- data.frame(NULL)
+```
+
+```{r}
+for(i in 1:2){
+  ## models for boys in top group
+  
+  # Logit regression
+  model1_boy_top <- glm(
+    formula = as.formula(paste(model_robust_top_ls[[i]])), 
+    family = binomial(link = "logit"),
+    data = ls_top_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_top, 
+    cluster = ls_top_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust[i + 1, 1] <- logit[1, 2]
+  table_4_robust[i + 1, 2] <- logit[1, 3]
+  
+  ## models for boys in bottom group
+  
+  # Logit regression
+  model1_boy_bot <- glm(
+    formula = as.formula(paste(model_robust_bot_ls[[i]])), 
+    family = binomial(link = "logit"),
+    data = ls_bot_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_bot, 
+    cluster = ls_bot_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust[i + 1, 3] <- logit[1, 2]
+  table_4_robust[i + 1, 4] <- logit[1, 3]
+  
+  ## models for girls in top group
+  
+  # Logit regression
+  model1_girl_top <- glm(
+    formula = as.formula(paste(model_robust_top_ls[[i]])), 
+    family = binomial(link = "logit"),
+    data = ls_top_girl_dta
+    )
+    
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top, 
+    cluster = ls_top_girl_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust[i + 1, 5] <- logit[1, 2]
+  table_4_robust[i + 1, 6] <- logit[1, 3]
+  
+  ## models for girls in bottom group
+  
+  # Logit regression
+  model1_girl_bot <- glm(
+    formula = as.formula(paste(model_robust_bot_ls[[i]])), 
+    family = binomial(link = "logit"),
+    data = ls_bot_girl_dta
+    )
+  
+  # Standard errors are adjusted with BRL  
+  V_CR2 <- vcovCR(  
+    obj = model1_girl_bot, 
+    cluster = ls_bot_girl_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust[i + 1, 7] <- logit[1, 2]
+  table_4_robust[i + 1, 8] <- logit[1, 3]
+}
+
+```
+
+
+Then we work on the aesthetics of our table. we will name both the columns as rows and also merge the estimates with standard coefficients and clean up the NAs.
+```{r}
+# renaming the data frame columns
+colnames(table_4_robust) <- c(
+  "Top", "SE", "Bottom", "SE ", "Top ", " SE", "Bottom ", " SE "
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_4_robust <- round(table_4_robust, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 2:3){
+  table_4_robust[i, 1] <- paste(
+    table_4_robust[i, 1], "<br>(", 
+    table_4_robust[i, 2], ")", 
+    sep = ""
+    )
+  table_4_robust[i, 3] <- paste(
+    table_4_robust[i, 3], "<br>(", 
+    table_4_robust[i, 4], ")", 
+    sep = ""
+    )
+  table_4_robust[i, 5] <- paste(
+    table_4_robust[i, 5], "<br>(", 
+    table_4_robust[i, 6], ")", 
+    sep = ""
+    )
+  
+  table_4_robust[i, 7] <- paste(
+    table_4_robust[i, 7], "<br>(", 
+    table_4_robust[i, 8], ")", 
+    sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_4_robust[, 1] <- linebreak(table_4_robust[, 1])
+table_4_robust[, 3] <- linebreak(table_4_robust[, 3])
+table_4_robust[, 5] <- linebreak(table_4_robust[, 5])
+table_4_robust[, 7] <- linebreak(table_4_robust[, 7])
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_4_robust <- table_4_robust %>%
+  select(-2, -4, -6, -8) 
+```
+
+Next, we will add the different mean and observation values to the data frame. 
+```{r}
+# Dependent Variable Mean
+table_4_robust[1, 1] <- round(mean(ls_top_boy_dta$bagrut_status), 3)
+table_4_robust[1, 2] <- round(mean(ls_bot_boy_dta$bagrut_status), 3)
+table_4_robust[1, 3] <- round(mean(ls_top_girl_dta$bagrut_status), 3)
+table_4_robust[1, 4] <- round(mean(ls_bot_girl_dta$bagrut_status), 3)
+
+# Number of observations per group
+table_4_robust[4, 1] <- nrow(ls_top_boy_dta)
+table_4_robust[4, 2] <- nrow(ls_bot_boy_dta)
+table_4_robust[4, 3] <- nrow(ls_top_girl_dta)
+table_4_robust[4, 4] <- nrow(ls_bot_girl_dta)
+
+# renaming the data frame rows
+rownames(table_4_robust) <- c(
+  "Dependent Variable Mean", "School Covariates, Quartile dummies", 
+  "School Covariates, Linear Lagged Score or Predicted Prob.", 
+  "Number of Students"
+  )
+```
+
+---
+
+## Classified By Predicted Probability
+
+We check for the models:
+* bagrut_status ~ treated + school_religious + p_75
+* bagrut_status ~ treated + school_arab + school_religious + p
+
+To check the robustness we remove a regressor. In this case we remove the regressor *school_arab*.
+
+```{r}
+# models we want to test
+model_robust_top_p <- c(
+  "bagrut_status ~ treated + school_religious + p_75",
+  "bagrut_status ~ treated + school_religious + p"
+)
+
+model_robust_bot_p <- c(
+  "bagrut_status ~ treated + school_religious + p_25",
+  "bagrut_status ~ treated + school_religious + p"
+)
+```
+
+```{r}
+# creating the data frame where the values will be saved
+table_4_robust_prob <- data.frame(NULL)
+```
+
+```{r}
+for(i in 1:2){
+  ## models for boys in top group
+  
+  # Logit regression
+  model1_boy_top <- glm(
+    formula = as.formula(paste(model_robust_top_p[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_top_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_top, 
+    cluster = p_top_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust_prob[i + 1, 1] <- logit[1, 2]
+  table_4_robust_prob[i + 1, 2] <- logit[1, 3]
+  
+  ## models for boys in bottom group
+  
+  # Logit regression
+  model1_boy_bot <- glm(
+    formula = as.formula(paste(model_robust_bot_p[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_bot_boy_dta
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_boy_bot, 
+    cluster = p_bot_boy_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_boy_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust_prob[i + 1, 3] <- logit[1, 2]
+  table_4_robust_prob[i + 1, 4] <- logit[1, 3]
+  
+  ## models for girls in top group
+  
+  # Logit regression
+  model1_girl_top <- glm(
+    formula = as.formula(paste(model_robust_top_p[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_top_girl_dta
+    )
+    
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top, 
+    cluster = p_top_girl_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust_prob[i + 1, 5] <- logit[1, 2]
+  table_4_robust_prob[i + 1, 6] <- logit[1, 3]
+  
+  ## models for girls in bottom group
+  
+  # Logit regression
+  model1_girl_bot <- glm(
+    formula = as.formula(paste(model_robust_bot_p[[i]])), 
+    family = binomial(link = "logit"),
+    data = p_bot_girl_dta
+    )
+    
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_bot, 
+    cluster = p_bot_girl_dta$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_4_robust_prob[i + 1, 7] <- logit[1, 2]
+  table_4_robust_prob[i + 1, 8] <- logit[1, 3]
+}
+```
+
+
+Then we work on the aesthetics of our table. we will name both the columns as rows and also merge the estimates with standard coefficients and clean up the NAs.
+```{r}
+# renaming the data frame columns
+colnames(table_4_robust_prob) <- c(
+  "Top", "SE", "Bottom", "SE ", "Top ", " SE", "Bottom ", " SE "
+  )
+
+
+# Rounding the values in the data frame to 3 decimals
+table_4_robust_prob <- round(table_4_robust_prob, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 2:3){
+  table_4_robust_prob[i, 1] <- paste(
+    table_4_robust_prob[i, 1], "<br>(", 
+    table_4_robust_prob[i, 2], ")", 
+    sep = ""
+    )
+  table_4_robust_prob[i, 3] <- paste(
+    table_4_robust_prob[i, 3], "<br>(", 
+    table_4_robust_prob[i, 4], ")", 
+    sep = ""
+    )
+  table_4_robust_prob[i, 5] <- paste(
+    table_4_robust_prob[i, 5], "<br>(", 
+    table_4_robust_prob[i, 6], ")", 
+    sep = ""
+    )
+  
+  table_4_robust_prob[i, 7] <- paste(
+    table_4_robust_prob[i, 7], "<br>(", 
+    table_4_robust_prob[i, 8], ")", 
+    sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_4_robust_prob[, 1] <- linebreak(
+  table_4_robust_prob[, 1]
+  )
+table_4_robust_prob[, 3] <- linebreak(
+  table_4_robust_prob[, 3]
+  )
+table_4_robust_prob[, 5] <- linebreak(
+  table_4_robust_prob[, 5]
+  )
+table_4_robust_prob[, 7] <- linebreak(
+  table_4_robust_prob[, 7]
+  )
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_4_robust_prob <- table_4_robust_prob %>%
+  select(-2, -4, -6, -8) 
+```
+
+Next, we will add the different mean and observation values to the data frame. 
+```{r}  
+# Dependent Variable Mean
+table_4_robust_prob[1, 1] <- round(mean(p_top_boy_dta$bagrut_status), 3)
+table_4_robust_prob[1, 2] <- round(mean(p_bot_boy_dta$bagrut_status), 3)
+table_4_robust_prob[1, 3] <- round(mean(p_top_girl_dta$bagrut_status), 3)
+table_4_robust_prob[1, 4] <- round(mean(p_bot_girl_dta$bagrut_status), 3)
+
+# Number of observations per group
+table_4_robust_prob[4, 1] <- nrow(p_top_boy_dta)
+table_4_robust_prob[4, 2] <- nrow(p_bot_boy_dta)
+table_4_robust_prob[4, 3] <- nrow(p_top_girl_dta)
+table_4_robust_prob[4, 4] <- nrow(p_bot_girl_dta)
+
+# renaming the data frame rows
+rownames(table_4_robust_prob) <- c(
+  "Dependent Variable Mean", "School Covariates, Quartile dummies", 
+  "School Covariates, Linear Lagged Score or Predicted Prob.", 
+  "Number of Students"
+  )
+```
+
+---
+
+## Generating Table C1
+
+Now we generate a table, putting it next to the original table.
+
+```{r}
+# We merge the original Table 4 with the robust table for ls and probability
+table_4_robust <- cbind(
+  table_4_replication_both, table_4_robust, table_4_robust_prob
+  )
+
+# Creating the table
+table_4_robust %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table C1: Robustness Check of Table 6 </b>",
+    col.names = c(
+      "Top", "Bottom", "Top", "Bottom", "Top", "Bottom", "Top", "Bottom",
+      "Top", "Bottom", "Top", "Bottom", "Top", "Bottom", "Top", "Bottom"
+      )
+    ) %>%
+  kable_classic(
+    full_width = F,
+    html_font = "Times New Roman",
+    position = "left"
+  ) %>%
+  add_header_above(
+    c(" " = 1, "Boys" = 2, "Girls" = 2, "Boys" = 2, "Girls" = 2,
+      "Boys" = 2, "Girls" = 2, "Boys" = 2, "Girls" = 2)
+  ) %>%
+  
+  # Classification
+  add_header_above(
+    c(" " = 1, "By lagged score" = 4, "By predicted probability" = 4,
+      "By lagged score" = 4, "By predicted probability" = 4)
+  ) %>%
+  
+  # Model
+  add_header_above(
+    c(" " = 1, "Original Model" = 8, "Robustness Check" = 8)
+  ) %>%
+  
+  # Panel A
+  pack_rows("Year: 2001", 1, 4, italic = TRUE, bold = FALSE) %>%
+  pack_rows("Models with:", 2, 3) %>%  
+  
+  # Adding footnotes for the table
+  footnote(
+    general = c(
+      "This table reports logit estimates, i.e., marginal effects. The estimates in this table were constructed using the sample of 2001. BRL standard errors are reported in parantheses.",
+      "The original model is a replication of Table B4 (Angrist & Lavy, 2009, p. 1398), while the robustness check has left out a variable."
+      ),
+    footnote_as_chunk = T
+  )
+```
+
+
+**Conclusion: **
+
+    * The results do not chance very much. 
+    * Hence, we will assume that the logit model results are robust.
+  
+---
+
+# Table 7. Interaction Effects
+
+
+We first define all the models we need to run
+```{r}
+interact_models_all_ols <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + siblings_4 + treated*siblings_4",
+  "bagrut_status ~ treated + school_arab + school_religious + pair + siblings_4 + treated*siblings_4",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+  father_educ + mother_educ + ls_50 + ls_75 + ls_100 + siblings_4 + treated*siblings_4",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + pair + siblings_4 + treated*siblings_4"
+)
+
+interact_models_boys_ols <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + siblings_4 + treated*siblings_4",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + siblings_4 + treated*siblings_4"
+  )
+
+interact_models_girls_ols <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + siblings_4 + treated*siblings_4", 
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + siblings_4 + treated*siblings_4"
+  )
+```
+
+Now we create all different values that are not part of the models
+```{r}
+# a vector containing the pair effects
+pairs_effects <- c("No", "Yes", "No", "Yes")
+```
+
+```{r}
+# creating the data frame where the values will be saved
+table_interaction <- data.frame(NULL)
+```
+
+Next, we will create different for loops that will iterate over the different models that are being calculated
+
+**Boys + Girls**
+
+```{r}
+# OLS
+
+for(i in 1:4){
+  model <- lm(
+    formula = as.formula(paste(interact_models_all_ols[[i]])), 
+    data = data_2001
+    )
+  lm <- coef_test(
+    obj = model, 
+    cluster = data_2001$school_id, 
+    vcov = "CR2"
+    )
+  table_interaction[i, 1] <- lm["treated:siblings_4", 2]
+  table_interaction[i, 2] <- lm["treated:siblings_4", 3]
+  
+}
+```
+
+**Boys**
+
+```{r}
+# OLS
+
+k = 1
+for(i in 1:2){
+  model <- lm(
+    formula = as.formula(paste(interact_models_boys_ols[[i]])), 
+    data = subset(data_2001, boy == 1)
+    )
+  lm <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    vcov = "CR2"
+    )
+   table_interaction[k, 3] <- lm["treated:siblings_4", 2]
+   table_interaction[k, 4] <- lm["treated:siblings_4", 3]
+  k = k + 2
+}
+```
+
+**Girls**
+
+```{r}
+# OLS 
+
+m = 1
+for(i in 1:2){
+  model <- lm(
+    formula = as.formula(paste(interact_models_girls_ols[[i]])), 
+    data = subset(data_2001, boy == 0)
+    )
+  lm <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 0)$school_id, 
+    vcov = "CR2"
+    )
+  table_interaction[m, 5] <- lm["treated:siblings_4", 2]
+  table_interaction[m, 6] <- lm["treated:siblings_4", 3]
+  m = m + 2
+}
+```
+
+Next, we bind all separate values of pair effects, OLS estimates, and standard errors.
+
+```{r}
+# Adding in all the other created values
+table_interaction <- cbind(pairs_effects, table_interaction)
+
+# renaming the data frame for clarity
+colnames(table_interaction) <- c(
+  "Pair effects",
+  "OLS All","SE All",
+  "OLS Boys", "SE Boys",
+  "OLS Girls", "SE Girls"
+  )
+
+# Reclassifying the columns to numeric where needed
+table_interaction[, 2:7] <- sapply(table_interaction[, 2:7], as.numeric)
+
+# Naming the rows
+rownames(table_interaction) <- c(
+  "Model 1", "Model 2", "Model 3", "Model 4"
+  )
+
+table_interaction[, 2:7] <- round(table_interaction[, 2:7], 4)
+
+# Merging together the coefficients and standard errors in one cell
+for (i in 1:4){
+ table_interaction[i, 2] <- paste(
+    table_interaction[i, 2], "<br>(", table_interaction[i, 3], ")", 
+    sep = ""
+    )
+  table_interaction[i, 4] <- paste(
+    table_interaction[i, 4], "<br>(", table_interaction[i, 5], ")", 
+    sep = ""
+    )
+  table_interaction[i, 6] <- paste(
+    table_interaction[i, 6], "<br>(", table_interaction[i, 7], ")", 
+    sep = ""
+    )
+}
+
+table_interaction[, 2] <- linebreak(table_interaction[, 2])
+table_interaction[, 4] <- linebreak(table_interaction[, 4])
+table_interaction[, 6] <- linebreak(table_interaction[, 6])
+
+
+
+# deleting the now irrelevant standard error columns
+table_interaction <- table_interaction %>%
+  select(-3, -5, -7) 
+
+# removing any values from the cells that do not have any values
+table_interaction[table_interaction == "NA<br>(NA)"] <- "—"
+```
+
+Lastly, we produce the table
+
+```{r}
+
+table_interaction <- table_interaction %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 7: Interaction Effects</b>",
+    col.names = c(
+      "Pair Effects", "All", "Boys", "Girls"
+      )
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left"
+    ) %>%
+  pack_rows("School Covariates", 1, 2, bold = TRUE) %>%
+  pack_rows(
+    "School Covariates, Quartile Dummies, Micro Covariates", 3, 4, bold = TRUE
+    ) %>% 
+  footnote(
+    general = "The table reports OLS estimates. The estimates in this table were constructed using the sample of 2001. BRL standard errors are reported in parentheses.",
+    footnote_as_chunk = T
+    )
+
+table_interaction
+
+```
+
+---
+
+# Sample Splitting
+
+We are generating data frames based on regression models.
+
+## OLS
+```{r}
+# creating the data frame where the values will be saved
+splitting_table_ols <- data.frame(NULL)
+```
+
+**All**
+
+```{r}
+# OLS regressions of restricted models for model 1
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 1] <- y1[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 2] <- y1[c(2, 4, 3), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 3] <- y2[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 4] <- y2[c(2, 4, 3), 3]
+```
+
+```{r}
+# OLS regressions of restricted models for model 2
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab + pair, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab + pair, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 5] <- y1[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 6] <- y1[c(2, 4, 3), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 7] <- y2[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 8] <- y2[c(2, 4, 3), 3]
+```
+
+```{r}
+# OLS regressions of restricted models for model 3
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 9] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 10] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 11] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 12] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+```
+
+```{r}
+# OLS regressions of restricted models for model 4
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100 + pair, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100 + pair, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 13] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 14] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 15] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 16] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+```
+
+---
+
+**Boys**
+
+```{r}
+# OLS regressions of restricted models for model 1
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 1 & boy == 1)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 0 & boy == 1)
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1 & boy == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 17] <- y1[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 18] <- y1[c(2, 4, 3), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0 & boy == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 19] <- y2[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 20] <- y2[c(2, 4, 3), 3]
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_ols[1:3, 21] <- "—"
+splitting_table_ols[1:3, 22] <- " "
+
+splitting_table_ols[1:3, 23] <- "—"
+splitting_table_ols[1:3, 24] <- " "
+```
+
+
+```{r}
+# OLS regressions of restricted models for model 3
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 1 & boy == 1)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 0 & boy == 1) 
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1 & boy == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 25] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 26] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0 & boy == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 27] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 28] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_ols[1:9, 29] <- "—"
+splitting_table_ols[1:9, 30] <- " "
+
+
+splitting_table_ols[1:9, 31] <- "—"
+splitting_table_ols[1:9, 32] <- " "
+```
+
+---
+
+**Girls**
+
+```{r}
+# OLS regressions of restricted models for model 1
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 1 & boy == 0)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 0 & boy == 0)
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1 & boy == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 33] <- y1[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 34] <- y1[c(2, 4, 3), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0 & boy == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:3, 35] <- y2[c(2, 4, 3), 2]
+splitting_table_ols[1:3, 36] <- y2[c(2, 4, 3), 3]
+
+
+
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_ols[1:3, 37] <- "—"
+splitting_table_ols[1:3, 38] <- " "
+
+
+splitting_table_ols[1:3, 39] <- "—"
+splitting_table_ols[1:3, 40] <- " "
+```
+
+```{r}
+# OLS regressions of restricted models for model 3
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 1 & boy == 0)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 0 & boy == 0) 
+  )
+
+# Correct standard errors for result comparisons
+y1 <- coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1 & boy == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 41] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 42] <- y1[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+
+# Correct standard errors for result comparisons
+y2 <- coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0 & boy == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")
+# assigning values to the table
+splitting_table_ols[1:9, 43] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 2]
+splitting_table_ols[1:9, 44] <- y2[c(2, 4, 3, 5, 6, 7, 8, 9, 10), 3]
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_ols[1:9, 45] <- "—"
+splitting_table_ols[1:9, 46] <- " "
+
+
+splitting_table_ols[1:9, 47] <- "—"
+splitting_table_ols[1:9, 48] <- " "
+```
+
+---
+
+## Logistic Regression
+```{r}
+# creating the data frame where the values will be saved
+splitting_table_log <- data.frame(NULL)
+```
+
+**All**
+
+```{r}
+# Logit regressions of restricted models for model 1
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  ) 
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 1] <- y1[c(3, 1, 2), 2]
+splitting_table_log[1:3, 2] <- y1[c(3, 1, 2), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 3] <- y2[c(3, 1, 2), 2]
+splitting_table_log[1:3, 4] <- y2[c(3, 1, 2), 3]
+```
+
+```{r}
+# Logit regressions of restricted models for model 2
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab + pair,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab + pair, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  ) 
+
+# Correct standard errors for result comparisions
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 5] <- y1[c(21, 19, 20), 2]
+splitting_table_log[1:3, 6] <- y1[c(21, 19, 20), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 7] <- y2[c(21, 19, 20), 2]
+splitting_table_log[1:3, 8] <- y2[c(21, 19, 20), 3]
+```
+
+```{r}
+# Logit regressions of restricted models for model 3
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  ) 
+
+# Correct standard errors for result comparisions
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 9] <- y1[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 10] <- y1[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 11] <- y2[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 12] <- y2[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 3]
+```
+
+```{r}
+# Logit regressions of restricted models for model 4
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100 + pair,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100 + pair,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  ) 
+
+# Correct standard errors for result comparisions
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 13] <- y1[c(27, 25, 26, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 14] <- y1[c(27, 25, 26, 1, 6, 2, 4, 5, 3), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 15] <- y2[c(27, 25, 26, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 16] <- y2[c(27, 25, 26, 1, 6, 2, 4, 5, 3), 3]
+```
+
+---
+
+**Boys**
+
+```{r}
+# Logit regressions of restricted models for model 1
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1 & boy == 1)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0 & boy == 1)
+  ) 
+
+# Correct standard errors for result comparisions
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1 & boy == 1)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 17] <- y1[c(3, 1, 2), 2]
+splitting_table_log[1:3, 18] <- y1[c(3, 1, 2), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0 & boy == 1)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 19] <- y2[c(3, 1, 2), 2]
+splitting_table_log[1:3, 20] <- y2[c(3, 1, 2), 3]
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_log[1:3, 21] <- "—"
+splitting_table_log[1:3, 22] <- " "
+
+splitting_table_log[1:3, 23] <- "—"
+splitting_table_log[1:3, 24] <- " "
+```
+
+```{r}
+# Logit regressions of restricted models for model 3
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1 & boy == 1)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0 & boy == 1)
+  ) 
+
+# Correct standard errors for result comparisions
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1 & boy == 1)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 25] <- y1[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 26] <- y1[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0 & boy == 1)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 27] <- y2[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 28] <- y2[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 3]
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_log[1:9, 29] <- "—"
+splitting_table_log[1:9, 30] <- " "
+
+splitting_table_log[1:9, 31] <- "—"
+splitting_table_log[1:9, 32] <- " "
+```
+
+---
+
+**Girls**
+
+```{r}
+# Logit regressions of restricted models for model 1
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1 & boy == 0)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0 & boy == 0)
+  ) 
+
+# Correct standard errors for result comparisions
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1 & boy == 0)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 33] <- y1[c(3, 1, 2), 2]
+splitting_table_log[1:3, 34] <- y1[c(3, 1, 2), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0 & boy == 0)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:3, 35] <- y2[c(3, 1, 2), 2]
+splitting_table_log[1:3, 36] <- y2[c(3, 1, 2), 3]
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_log[1:3, 37] <- "—"
+splitting_table_log[1:3, 38] <- " "
+
+splitting_table_log[1:3, 39] <- "—"
+splitting_table_log[1:3, 40] <- " "
+```
+
+```{r}
+# Logit regressions of restricted models for model 3
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1 & boy == 0)
+  )
+log_unres_2 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0 & boy == 0)
+  ) 
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1 & boy == 0)$school_id,
+  type = "CR2"
+  )
+y1 <- margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 41] <- y1[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 42] <- y1[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 3]
+
+# Correct standard errors for result comparisons
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0 & boy == 0)$school_id,
+  type = "CR2"
+  )
+
+y2 <- margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  type = "response"
+  ) %>% summary()
+
+# assigning values to the table
+splitting_table_log[1:9, 43] <- y2[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 2]
+splitting_table_log[1:9, 44] <- y2[c(9, 7, 8, 1, 6, 2, 4, 5, 3), 3]
+```
+
+```{r}
+# Does not apply to subgroup gender 
+splitting_table_log[1:9, 45] <- "—"
+splitting_table_log[1:9, 46] <- " "
+
+splitting_table_log[1:9, 47] <- "—"
+splitting_table_log[1:9, 48] <- " "
+```
+
+---
+
+## Tables
+
+**OLS**
+```{r}
+# Rounding the values that are numeric in the data frame to 3 decimals
+splitting_table_ols <- splitting_table_ols %>%
+  mutate_if(is.numeric, round, 4)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:9){
+  splitting_table_ols[i, 1] <- paste(
+    splitting_table_ols[i, 1], "<br>(", splitting_table_ols[i, 2], ")", 
+    sep = ""
+    )
+  splitting_table_ols[i, 3] <- paste(
+    splitting_table_ols[i, 3], "<br>(", splitting_table_ols[i, 4], ")", 
+    sep = ""
+    )
+  splitting_table_ols[i, 5] <- paste(
+    splitting_table_ols[i, 5], "<br>(", splitting_table_ols[i, 6], ")", 
+    sep = ""
+    )
+  
+  splitting_table_ols[i, 7] <- paste(
+    splitting_table_ols[i, 7], "<br>(", splitting_table_ols[i, 8], ")", 
+    sep = ""
+    )
+  
+  splitting_table_ols[i, 9] <- paste(
+    splitting_table_ols[i, 9], "<br>(", splitting_table_ols[i, 10], ")", 
+    sep = ""
+    )
+  
+  splitting_table_ols[i, 11] <- paste(
+    splitting_table_ols[i, 11], "<br>(", splitting_table_ols[i, 12], ")", 
+    sep = ""
+    )
+  
+  splitting_table_ols[i, 13] <- paste(
+    splitting_table_ols[i, 13], "<br>(", splitting_table_ols[i, 14], ")", 
+    sep = ""
+    )
+    
+  splitting_table_ols[i, 15] <- paste(
+    splitting_table_ols[i, 15], "<br>(", splitting_table_ols[i, 16], ")", 
+    sep = ""
+    )
+        
+  splitting_table_ols[i, 17] <- paste(
+    splitting_table_ols[i, 17], "<br>(", splitting_table_ols[i, 18], ")", 
+    sep = ""
+    )
+          
+  splitting_table_ols[i, 19] <- paste(
+    splitting_table_ols[i, 19], "<br>(", splitting_table_ols[i, 20], ")", 
+    sep = ""
+    )
+           
+  splitting_table_ols[i, 21] <- paste(
+    splitting_table_ols[i, 21], "<br>(", splitting_table_ols[i, 22], ")", 
+    sep = ""
+    )
+              
+  splitting_table_ols[i, 23] <- paste(
+    splitting_table_ols[i, 23], "<br>(", splitting_table_ols[i, 24], ")", 
+    sep = ""
+    )
+                
+  splitting_table_ols[i, 25] <- paste(
+    splitting_table_ols[i, 25], "<br>(", splitting_table_ols[i, 26], ")", 
+    sep = ""
+    )
+                  
+  splitting_table_ols[i, 27] <- paste(
+    splitting_table_ols[i, 27], "<br>(", splitting_table_ols[i, 28], ")", 
+    sep = ""
+    )
+                    
+  splitting_table_ols[i, 29] <- paste(
+    splitting_table_ols[i, 29], "<br>(", splitting_table_ols[i, 30], ")", 
+    sep = ""
+    )
+            
+  splitting_table_ols[i, 31] <- paste(
+    splitting_table_ols[i, 31], "<br>(", splitting_table_ols[i, 32], ")", 
+    sep = ""
+    )
+                      
+                        
+  splitting_table_ols[i, 33] <- paste(
+    splitting_table_ols[i, 33], "<br>(", splitting_table_ols[i, 34], ")", 
+    sep = ""
+    )
+                          
+  splitting_table_ols[i, 35] <- paste(
+    splitting_table_ols[i, 35], "<br>(", splitting_table_ols[i, 36], ")", 
+    sep = ""
+    )
+                            
+  splitting_table_ols[i, 37] <- paste(
+    splitting_table_ols[i, 37], "<br>(", splitting_table_ols[i, 38], ")", 
+    sep = ""
+    )
+                              
+  splitting_table_ols[i, 39] <- paste(
+    splitting_table_ols[i, 39], "<br>(", splitting_table_ols[i, 40], ")", 
+    sep = ""
+    )
+                                
+  splitting_table_ols[i, 41] <- paste(
+    splitting_table_ols[i, 41], "<br>(", splitting_table_ols[i, 42], ")", 
+    sep = ""
+    )
+                                  
+  splitting_table_ols[i, 43] <- paste(
+    splitting_table_ols[i, 43], "<br>(", splitting_table_ols[i, 44], ")", 
+    sep = ""
+    )
+                                    
+  splitting_table_ols[i, 45] <- paste(
+    splitting_table_ols[i, 45], "<br>(", splitting_table_ols[i, 46], ")", 
+    sep = ""
+    )
+                                      
+  splitting_table_ols[i, 47] <- paste(
+    splitting_table_ols[i, 47], "<br>(", splitting_table_ols[i, 48], ")", 
+    sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+splitting_table_ols[, 1] <- linebreak(splitting_table_ols[, 1])
+splitting_table_ols[, 3] <- linebreak(splitting_table_ols[, 3])
+splitting_table_ols[, 5] <- linebreak(splitting_table_ols[, 5])
+splitting_table_ols[, 7] <- linebreak(splitting_table_ols[, 7])
+splitting_table_ols[, 9] <- linebreak(splitting_table_ols[, 9])
+splitting_table_ols[, 11] <- linebreak(splitting_table_ols[, 11])
+splitting_table_ols[, 13] <- linebreak(splitting_table_ols[, 13])
+splitting_table_ols[, 15] <- linebreak(splitting_table_ols[, 15])
+splitting_table_ols[, 17] <- linebreak(splitting_table_ols[, 17])
+splitting_table_ols[, 19] <- linebreak(splitting_table_ols[, 19])
+splitting_table_ols[, 21] <- linebreak(splitting_table_ols[, 21])
+splitting_table_ols[, 23] <- linebreak(splitting_table_ols[, 23])
+splitting_table_ols[, 25] <- linebreak(splitting_table_ols[, 25])
+splitting_table_ols[, 27] <- linebreak(splitting_table_ols[, 27])
+splitting_table_ols[, 29] <- linebreak(splitting_table_ols[, 29])
+splitting_table_ols[, 31] <- linebreak(splitting_table_ols[, 31])
+splitting_table_ols[, 33] <- linebreak(splitting_table_ols[, 33])
+splitting_table_ols[, 35] <- linebreak(splitting_table_ols[, 35])
+splitting_table_ols[, 37] <- linebreak(splitting_table_ols[, 37])
+splitting_table_ols[, 39] <- linebreak(splitting_table_ols[, 39])
+splitting_table_ols[, 41] <- linebreak(splitting_table_ols[, 41])
+splitting_table_ols[, 43] <- linebreak(splitting_table_ols[, 43])
+splitting_table_ols[, 45] <- linebreak(splitting_table_ols[, 45])
+splitting_table_ols[, 47] <- linebreak(splitting_table_ols[, 47])
+
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+splitting_table_ols <- splitting_table_ols %>%
+  select(-2, -4, -6, -8, -10, -12, -14, -16, -18, -20, -22, -24, -26, -28,
+         -30, -32, -34, -36, -38, -40, -42, -44, -46, -48) 
+
+# removing any values from the cells that do not have any values
+splitting_table_ols[splitting_table_ols == "NA<br>(NA)"] <- "—"
+splitting_table_ols[splitting_table_ols == "—<br>( )"] <- "—"
+
+# splitting the table in separate tables for All, Boys, and Girls
+splitting_table_ols_all <- splitting_table_ols[, 1:8]
+splitting_table_ols_boys <- splitting_table_ols[, 9:16]
+splitting_table_ols_girls <- splitting_table_ols[, 17:24]
+
+# renaming the data sets columns
+colnames(splitting_table_ols_all) <- c(
+  "1a OLS", "1b OLS", "2a OLS", "2b OLS", 
+  "3a OLS", "3b OLS", "4a OLS", "4b OLS"
+  )
+colnames(splitting_table_ols_boys) <- colnames(splitting_table_ols_all)
+colnames(splitting_table_ols_girls) <- colnames(splitting_table_ols_all)
+
+```
+
+---
+
+**Logistic Regression**
+```{r}
+# Rounding the values that are numeric in the data frame to 3 decimals
+splitting_table_log <- splitting_table_log %>%
+  mutate_if(is.numeric, round, 4)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:9){
+  splitting_table_log[i, 1] <- paste(
+    splitting_table_log[i, 1], "<br>(", splitting_table_log[i, 2], ")", sep = ""
+    )
+  splitting_table_log[i, 3] <- paste(
+    splitting_table_log[i, 3], "<br>(", splitting_table_log[i, 4], ")", sep = ""
+    )
+  splitting_table_log[i, 5] <- paste(
+    splitting_table_log[i, 5], "<br>(", splitting_table_log[i, 6], ")", sep = ""
+    )
+  
+  splitting_table_log[i, 7] <- paste(
+    splitting_table_log[i, 7], "<br>(", splitting_table_log[i, 8], ")", sep = ""
+    )
+  
+  splitting_table_log[i, 9] <- paste(
+    splitting_table_log[i, 9], "<br>(", splitting_table_log[i, 10], ")", 
+    sep = ""
+    )
+  
+  splitting_table_log[i, 11] <- paste(
+    splitting_table_log[i, 11], "<br>(", splitting_table_log[i, 12], ")", 
+    sep = ""
+    )
+  
+  splitting_table_log[i, 13] <- paste(
+    splitting_table_log[i, 13], "<br>(", splitting_table_log[i, 14], ")", 
+    sep = ""
+    )
+    
+  splitting_table_log[i, 15] <- paste(
+    splitting_table_log[i, 15], "<br>(", splitting_table_log[i, 16], ")", 
+    sep = ""
+    )
+        
+  splitting_table_log[i, 17] <- paste(
+    splitting_table_log[i, 17], "<br>(", splitting_table_log[i, 18], ")", 
+    sep = ""
+    )
+          
+  splitting_table_log[i, 19] <- paste(
+    splitting_table_log[i, 19], "<br>(", splitting_table_log[i, 20], ")", 
+    sep = ""
+    )
+           
+  splitting_table_log[i, 21] <- paste(
+    splitting_table_log[i, 21], "<br>(", splitting_table_log[i, 22], ")", 
+    sep = ""
+    )
+              
+  splitting_table_log[i, 23] <- paste(
+    splitting_table_log[i, 23], "<br>(", splitting_table_log[i, 24], ")", 
+    sep = ""
+    )
+                
+  splitting_table_log[i, 25] <- paste(
+    splitting_table_log[i, 25], "<br>(", splitting_table_log[i, 26], ")", 
+    sep = ""
+    )
+                  
+  splitting_table_log[i, 27] <- paste(
+    splitting_table_log[i, 27], "<br>(", splitting_table_log[i, 28], ")", 
+    sep = ""
+    )
+                    
+  splitting_table_log[i, 29] <- paste(
+    splitting_table_log[i, 29], "<br>(", splitting_table_log[i, 30], ")", 
+    sep = ""
+    )
+            
+  splitting_table_log[i, 31] <- paste(
+    splitting_table_log[i, 31], "<br>(", splitting_table_log[i, 32], ")", 
+    sep = ""
+    )
+                      
+  splitting_table_log[i, 33] <- paste(
+    splitting_table_log[i, 33], "<br>(", splitting_table_log[i, 34], ")", 
+    sep = ""
+    )
+                          
+  splitting_table_log[i, 35] <- paste(
+    splitting_table_log[i, 35], "<br>(", splitting_table_log[i, 36], ")", 
+    sep = ""
+    )
+                            
+  splitting_table_log[i, 37] <- paste(
+    splitting_table_log[i, 37], "<br>(", splitting_table_log[i, 38], ")", 
+    sep = ""
+    )
+                              
+  splitting_table_log[i, 39] <- paste(
+    splitting_table_log[i, 39], "<br>(", splitting_table_log[i, 40], ")", 
+    sep = ""
+    )
+                                
+  splitting_table_log[i, 41] <- paste(
+    splitting_table_log[i, 41], "<br>(", splitting_table_log[i, 42], ")", 
+    sep = ""
+    )
+                                  
+  splitting_table_log[i, 43] <- paste(
+    splitting_table_log[i, 43], "<br>(", splitting_table_log[i, 44], ")", 
+    sep = ""
+    )
+                                    
+  splitting_table_log[i, 45] <- paste(
+    splitting_table_log[i, 45], "<br>(", splitting_table_log[i, 46], ")", 
+    sep = ""
+    )
+                                      
+  splitting_table_log[i, 47] <- paste(
+    splitting_table_log[i, 47], "<br>(", splitting_table_log[i, 48], ")", 
+    sep = ""
+  )
+  }
+# generate line breaks in the cell between the coefficient and standard error
+splitting_table_log[, 1] <- linebreak(splitting_table_log[, 1])
+splitting_table_log[, 3] <- linebreak(splitting_table_log[, 3])
+splitting_table_log[, 5] <- linebreak(splitting_table_log[, 5])
+splitting_table_log[, 7] <- linebreak(splitting_table_log[, 7])
+splitting_table_log[, 9] <- linebreak(splitting_table_log[, 9])
+splitting_table_log[, 11] <- linebreak(splitting_table_log[, 11])
+splitting_table_log[, 13] <- linebreak(splitting_table_log[, 13])
+splitting_table_log[, 15] <- linebreak(splitting_table_log[, 15])
+splitting_table_log[, 17] <- linebreak(splitting_table_log[, 17])
+splitting_table_log[, 19] <- linebreak(splitting_table_log[, 19])
+splitting_table_log[, 21] <- linebreak(splitting_table_log[, 21])
+splitting_table_log[, 23] <- linebreak(splitting_table_log[, 23])
+splitting_table_log[, 25] <- linebreak(splitting_table_log[, 25])
+splitting_table_log[, 27] <- linebreak(splitting_table_log[, 27])
+splitting_table_log[, 29] <- linebreak(splitting_table_log[, 29])
+splitting_table_log[, 31] <- linebreak(splitting_table_log[, 31])
+splitting_table_log[, 33] <- linebreak(splitting_table_log[, 33])
+splitting_table_log[, 35] <- linebreak(splitting_table_log[, 35])
+splitting_table_log[, 37] <- linebreak(splitting_table_log[, 37])
+splitting_table_log[, 39] <- linebreak(splitting_table_log[, 39])
+splitting_table_log[, 41] <- linebreak(splitting_table_log[, 41])
+splitting_table_log[, 43] <- linebreak(splitting_table_log[, 43])
+splitting_table_log[, 45] <- linebreak(splitting_table_log[, 45])
+splitting_table_log[, 47] <- linebreak(splitting_table_log[, 47])
+
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+splitting_table_log <- splitting_table_log %>%
+  select(-2, -4, -6, -8, -10, -12, -14, -16, -18, -20, -22, -24, -26, -28,
+         -30, -32, -34, -36, -38, -40, -42, -44, -46, -48) 
+
+# removing any values from the cells that do not have any values
+splitting_table_log[splitting_table_log == "NA<br>(NA)"] <- "—"
+splitting_table_log[splitting_table_log == "—<br>( )"] <- "—"
+
+# splitting the table in separate tablesf for All, Boys, and Girls
+splitting_table_log_all <- splitting_table_log[, 1:8]
+splitting_table_log_boys <- splitting_table_log[, 9:16]
+splitting_table_log_girls <- splitting_table_log[, 17:24]
+
+# renaming the data sets columns
+colnames(splitting_table_log_all) <- c(
+  "1a Logit", "1b Logit", "2a Logit", "2b Logit", 
+  "3a Logit", "3b Logit", "4a Logit", "4b Logit"
+  )
+colnames(splitting_table_log_boys) <- colnames(splitting_table_log_all)
+colnames(splitting_table_log_girls) <- colnames(splitting_table_log_all)
+```
+
+We will create 3 tables, as putting everything in 1 table will make it too large. Therefore, we subdivide the tables under the categories **All**, **Boys**, and **Girls**.
+
+Before moving on to creating the table, we first create vectors that contain both the dependent variable mean and the number of students for each model.
+
+### Table 8. Sample Splitting - All
+
+```{r}
+# As for each model the dependent variable mean is the same, we create a vector
+# for both situations and repeat that vector for the amount needed
+splitting_table_means_all <- c(
+  mean(
+    subset(data_2001, siblings_4 == 1)$bagrut_status
+    ),
+  mean(
+    subset(data_2001, siblings_4 == 0)$bagrut_status
+    )
+)
+splitting_table_means_all <- round(rep(splitting_table_means_all, times = 8), 3)
+
+# As for each model the number of students is the same, we create a vector for
+# both situationas and repeat that vector for the amount needed
+splitting_table_observation_all <- c(
+  nrow(subset(data_2001, siblings_4 == 1)),
+  nrow(subset(data_2001, siblings_4 == 0))
+)
+
+splitting_table_observation_all <- rep(
+  splitting_table_observation_all, times = 8
+  )
+
+```
+
+
+```{r}
+# Merging both classifications for the table All 
+splitting_table_all <- cbind(splitting_table_ols_all, splitting_table_log_all)
+
+# Adding in all the earlier created vectors with the table by row
+splitting_table_all <- rbind(
+  splitting_table_means_all, 
+  splitting_table_all, 
+  splitting_table_observation_all
+  )
+
+# Naming the rows
+rownames(splitting_table_all) <- c(
+  "Dependent Variable Mean", "Treated", "Arab School", "Religious School", 
+  "Father's Education", "Mother's Education", "Immigrant",  "2nd", "3rd", "4th", 
+  "Number of Students"
+  )
+
+# Creating the table
+splitting_table_all %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 8: Sample Splitting - All</b>",
+    col.names = c(
+      ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4",
+      ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4"
+    ),
+    align = "l"
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left") %>%
+  add_header_above(c(
+    " " = 1, "Model 1" = 2, "Model 2" = 2, "Model 3" = 2, "Model 4" = 2,
+    "Model 1" = 2, "Model 2" = 2, "Model 3" = 2, "Model 4" = 2
+    )
+    ) %>%
+  
+  # Model specification
+  add_header_above(c(" " = 1, "OLS" = 8, "Logit" = 8)) %>%
+  pack_rows("School Covariates", 3, 4) %>%
+  pack_rows("Micro Covariates", 5, 7) %>%
+  pack_rows("Lagged Score Quartile Dummies", 8, 10, indent = TRUE) %>%
+  
+  # Adding footnotes for the table
+  footnote(
+    general = "This table reports both OLS and logit estimates, i.e., marginal effects. The estimates in this table were constructed using the samples from 2001. BRL standard errors are reported in parantheses.",
+    footnote_as_chunk = T
+  )
+```
+
+---
+
+### Table 9. Sample Splitting - Boys
+
+```{r}
+# As for each model the dependent variable mean is the same, we create a vector
+# for both situations and repeat that vector for the amount needed
+splitting_table_means_boys <- c(
+  mean(
+    subset(data_2001, siblings_4 == 1 & boy == 1)$bagrut_status
+    ),
+  mean(
+    subset(data_2001, siblings_4 == 0 & boy == 1)$bagrut_status
+    )
+)
+splitting_table_means_boys <- round(rep(splitting_table_means_boys, times = 8), 3)
+
+# As for each model the number of students is the same, we create a vector for
+# both situationas and repeat that vector for the amount needed
+splitting_table_observation_boys <- c(
+  nrow(subset(data_2001, siblings_4 == 1 & boy == 1)),
+  nrow(subset(data_2001, siblings_4 == 0 & boy == 1))
+)
+
+splitting_table_observation_boys <- rep(
+  splitting_table_observation_boys, times = 8
+  )
+
+```
+
+```{r}
+# Merging both classifications for the table Boys
+splitting_table_boys <- cbind(
+  splitting_table_ols_boys, splitting_table_log_boys
+  )
+
+# Adding in all the earlier created vectors with the table by row
+splitting_table_boys <- rbind(
+  splitting_table_means_boys,
+  splitting_table_boys,
+  splitting_table_observation_boys
+)
+
+# Naming the rows
+rownames(splitting_table_boys) <- rownames(splitting_table_all)
+
+# Creating the table
+splitting_table_boys %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 9: Sample Splitting - Boys</b>",
+    col.names = c(
+      ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4",
+      ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4"
+    ),
+    align = "l"
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left") %>%
+  add_header_above(c(
+    " " = 1, "Model 1" = 2, "Model 2" = 2, "Model 3" = 2, "Model 4" = 2,
+    "Model 1" = 2, "Model 2" = 2, "Model 3" = 2, "Model 4" = 2
+    )
+    ) %>%
+  
+  # Model specification
+  add_header_above(c(" " = 1, "OLS" = 8, "Logit" = 8)) %>%
+  pack_rows("School Covariates", 3, 4) %>%
+  pack_rows("Micro Covariates", 5, 7) %>%
+  pack_rows("Lagged Score Quartile Dummies", 8, 10, indent = TRUE) %>%
+  
+  # Adding footnotes for the table
+  footnote(
+    general = "This table reports both OLS and logit estimates, i.e., marginal effects. The estimates in this table were constructed using the samples from 2001. BRL standard errors are reported in parantheses.",
+    footnote_as_chunk = T
+  )
+```
+
+---
+
+### Table 10. Sample Splitting - Girls
+
+```{r}
+# As for each model the dependent variable mean is the same, we create a vector
+# for both situations and repeat that vector for the amount needed
+splitting_table_means_girls <- c(
+  mean(
+    subset(data_2001, siblings_4 == 1 & boy == 0)$bagrut_status
+    ),
+  mean(
+    subset(data_2001, siblings_4 == 0 & boy == 0)$bagrut_status
+    )
+)
+splitting_table_means_girls <- round(rep(splitting_table_means_girls, times = 8), 3)
+
+# As for each model the number of students is the same, we create a vector for
+# both situationas and repeat that vector for the amount needed
+splitting_table_observation_girls <- c(
+  nrow(subset(data_2001, siblings_4 == 1 & boy == 0)),
+  nrow(subset(data_2001, siblings_4 == 0 & boy == 0))
+)
+
+splitting_table_observation_girls <- rep(
+  splitting_table_observation_girls, times = 8
+  )
+
+```
+
+
+```{r}
+# Merging both classifications for the table Girls
+splitting_table_girls <- cbind(
+  splitting_table_ols_girls, splitting_table_log_girls
+  )
+
+# Adding in all the earlier created vectors with the table by row
+splitting_table_girls <- rbind(
+  splitting_table_means_girls,
+  splitting_table_girls,
+  splitting_table_observation_girls
+)
+
+# Naming the rows
+rownames(splitting_table_girls) <- rownames(splitting_table_all)
+
+# Creating the table
+splitting_table_girls %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 10: Sample Splitting - Girls</b>",
+    col.names = c(
+      ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4",
+      ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4", ">= 4", " < 4"
+    ),
+    align = "l"
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left") %>%
+  add_header_above(c(
+    " " = 1, "Model 1" = 2, "Model 2" = 2, "Model 3" = 2, "Model 4" = 2,
+    "Model 1" = 2, "Model 2" = 2, "Model 3" = 2, "Model 4" = 2
+    )
+    ) %>%
+  
+  # Model specification
+  add_header_above(c(" " = 1, "OLS" = 8, "Logit" = 8)) %>%
+  pack_rows("School Covariates", 3, 4) %>%
+  pack_rows("Micro Covariates", 5, 7) %>%
+  pack_rows("Lagged Score Quartile Dummies", 8, 10, indent = TRUE) %>%
+  
+  # Adding footnotes for the table
+  footnote(
+    general = "This table reports both OLS and logit estimates, i.e., marginal effects. The estimates in this table were constructed using the samples from 2001. BRL standard errors are reported in parantheses.",
+    footnote_as_chunk = T
+  )
+```
+
+
+---
+
+# Sample Splitting for Marginal Students
+
+Here we partly replicate the method from Table 6, to apply to the only model of the subgroup girls that was significant, to see whether there is a difference between marginal groups. We will do this for both the quartiles for the lagged score, as well as for the quartiles of probability.
+
+
+## Classified By Lagged Score
+
+```{r}
+# creating the data frame where the values will be saved
+splitting_models_table_4 <- data.frame(NULL)
+
+```
+
+```{r}
+# models we want to test
+models <- c(
+  "bagrut_status ~ treated + school_arab + school_religious", 
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+  father_educ + mother_educ + ls_50 + ls_75 + ls_100"
+)
+
+for(i in 1:2){
+  ## models for girls in top group & siblings_4 == 1
+  
+  # Logit regression
+  model1_girl_top_unres_1 <- glm(
+    formula = as.formula(paste(models[[i]])), 
+    family = binomial(link = "logit"),
+    data = subset(ls_top_girl_dta, siblings_4 == 1)
+    )
+
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top_unres_1, 
+    cluster = subset(ls_top_girl_dta, siblings_4 == 1)$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top_unres_1, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  splitting_models_table_4[i + 1, 1] <- logit[1, 2]
+  splitting_models_table_4[i + 1, 2] <- logit[1, 3]
+  
+
+  ## models for girls in top group & siblings_4 == 0
+  
+  # Logit regression
+  model1_girl_top_unres_2 <- glm(
+    formula = as.formula(paste(models[[i]])), 
+    family = binomial(link = "logit"),
+    data = subset(ls_top_girl_dta, siblings_4 == 0)
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top_unres_2, 
+    cluster = subset(ls_top_girl_dta, siblings_4 == 0)$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top_unres_2, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+
+  # assigning values to the table
+  splitting_models_table_4[i + 1, 3] <- logit[1, 2]
+  splitting_models_table_4[i + 1, 4] <- logit[1, 3]
+  
+  ## models for girls in bottom group & siblings_4 == 1
+
+  # Logit regression
+  model1_girl_bot_unres1 <- glm(
+      formula = as.formula(paste(models[[i]])), 
+      family = binomial(link = "logit"),
+      data = subset(ls_bot_girl_dta, siblings_4 == 1)
+      )
+    
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_bot_unres1, 
+   cluster = subset(ls_bot_girl_dta, siblings_4 == 1)$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot_unres1, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  splitting_models_table_4[i + 1, 5] <- logit[1, 2]
+  splitting_models_table_4[i + 1, 6] <- logit[1, 3]
+
+ ## models for girls in bottom group & siblings_4 == 0
+  
+  # Logit regression
+  model1_girl_bot_unres2 <- glm(
+    formula = as.formula(paste(models[[i]])), 
+    family = binomial(link = "logit"),
+    data = subset(ls_bot_girl_dta, siblings_4 == 0)
+    )
+    
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_bot_unres2, 
+    cluster = subset(ls_bot_girl_dta, siblings_4 == 0)$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot_unres2, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+
+  # assigning values to the table
+  splitting_models_table_4[i + 1, 7] <- logit[1, 2]
+  splitting_models_table_4[i + 1, 8] <- logit[1, 3]
+
+}
+
+# Dependent Variable Mean
+splitting_models_table_4[1, 1] <- mean(
+  subset(ls_top_girl_dta, siblings_4 == 1)$bagrut_status
+  )
+splitting_models_table_4[1, 3] <- mean(
+  subset(ls_top_girl_dta, siblings_4 == 0)$bagrut_status
+  )
+splitting_models_table_4[1, 5] <- mean(subset(
+  ls_bot_girl_dta, siblings_4 == 1)$bagrut_status
+  )
+splitting_models_table_4[1, 7] <- mean(
+  subset(ls_bot_girl_dta, siblings_4 == 0)$bagrut_status
+  )
+
+# Number of observations per group
+splitting_models_table_4[4, 1] <- nrow(subset(ls_top_girl_dta, siblings_4 == 1))
+splitting_models_table_4[4, 3] <- nrow(subset(ls_top_girl_dta, siblings_4 == 0))
+splitting_models_table_4[4, 5] <- nrow(subset(ls_bot_girl_dta, siblings_4 == 1))
+splitting_models_table_4[4, 7] <- nrow(subset(ls_bot_girl_dta, siblings_4 == 0))
+
+
+# renaming the data frame for clarity
+colnames(splitting_models_table_4) <- c(
+  "Top", "SE", "Top ", "SE ", "Bottom", " SE", "Bottom ", " SE "
+  )
+
+rownames(splitting_models_table_4) <- c(
+  "Dependent Variable Mean", 
+  "Model 1",
+  "Model 3",
+  "Number of Students"
+  )
+
+splitting_models_table_4 <- round(splitting_models_table_4, 3)
+
+# Merging together the coefficients and standard errors in one cell
+
+for(i in 1:2){
+splitting_models_table_4[i + 1, 1] <- paste(
+  splitting_models_table_4[i + 1, 1], "<br>(", 
+  splitting_models_table_4[i + 1, 2], ")", 
+  sep = ""
+  )
+
+splitting_models_table_4[i + 1, 3] <- paste(
+  splitting_models_table_4[i + 1, 3], "<br>(", 
+  splitting_models_table_4[i + 1, 4], ")", 
+  sep = ""
+    )
+splitting_models_table_4[i + 1, 5] <- paste(
+  splitting_models_table_4[i + 1, 5], "<br>(", 
+  splitting_models_table_4[i + 1, 6], ")", 
+  sep = ""
+  )
+  
+splitting_models_table_4[i + 1, 7] <- paste(
+  splitting_models_table_4[i + 1, 7], "<br>(", 
+  splitting_models_table_4[i + 1, 8], ")", 
+  sep = ""
+  )
+}
+  
+splitting_models_table_4[, 1] <- linebreak(splitting_models_table_4[, 1])
+splitting_models_table_4[, 3] <- linebreak(splitting_models_table_4[, 3])
+splitting_models_table_4[, 5] <- linebreak(splitting_models_table_4[, 5])
+splitting_models_table_4[, 7] <- linebreak(splitting_models_table_4[, 7])
+
+# deleting the now irrelevant standard error columns
+splitting_models_table_4 <- splitting_models_table_4 %>%
+  select(-2, -4, -6, -8) 
+
+```
+
+---
+
+## Classified By Predicted Probability
+
+```{r}
+# creating the data frame where the values will be saved
+splitting_models_table_4_log <- data.frame(NULL)
+```
+
+
+```{r}
+# models we want to test
+models <- c(
+  "bagrut_status ~ treated + school_arab + school_religious", 
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+  father_educ + mother_educ + p_50 + p_75 + p_100"
+)
+
+for(i in 1:2){
+# models for girls in top group & siblings_4 == 1
+  
+  # Logit regression
+  model1_girl_top_unres_1 <- glm(
+    formula = as.formula(paste(models[[i]])), 
+    family = binomial(link = "logit"),
+    data = subset(p_top_girl_dta, siblings_4 == 1)
+    )
+
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top_unres_1, 
+    cluster = subset(p_top_girl_dta, siblings_4 == 1)$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top_unres_1, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  splitting_models_table_4_log[i + 1, 1] <- logit[1, 2]
+  splitting_models_table_4_log[i + 1, 2] <- logit[1, 3]
+  
+
+  # models for girls in top group & siblings_4 == 0
+  
+  # Logit regression
+  model1_girl_top_unres_2 <- glm(
+    formula = as.formula(paste(models[[i]])), 
+    family = binomial(link = "logit"),
+    data = subset(p_top_girl_dta, siblings_4 == 0)
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model1_girl_top_unres_2, 
+    cluster = subset(p_top_girl_dta, siblings_4 == 0)$school_id,
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_top_unres_2, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  splitting_models_table_4_log[i + 1, 3] <- logit[1, 2]
+  splitting_models_table_4_log[i + 1, 4] <- logit[1, 3]
+  
+  # models for girls in bottom group & siblings_4 == 1
+ 
+  # Logit regression
+   model1_girl_bot_unres1 <- glm(
+      formula = as.formula(paste(models[[i]])), 
+      family = binomial(link = "logit"),
+      data = subset(p_bot_girl_dta, siblings_4 == 1)
+      )
+  
+  # Standard errors are adjusted with BRL  
+  V_CR2 <- vcovCR(
+      obj = model1_girl_bot_unres1, 
+      cluster = subset(p_bot_girl_dta, siblings_4 == 1)$school_id,
+      type = "CR2"
+      )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot_unres1, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  splitting_models_table_4_log[i + 1, 5] <- logit[1, 2]
+  splitting_models_table_4_log[i + 1, 6] <- logit[1, 3]
+
+# models for girls in bottom group & siblings_4 == 0
+ 
+  # Logit regression
+   model1_girl_bot_unres2 <- glm(
+      formula = as.formula(paste(models[[i]])), 
+      family = binomial(link = "logit"),
+      data = subset(p_bot_girl_dta, siblings_4 == 0)
+      )
+    
+  # Standard errors are adjusted with BRL
+   V_CR2 <- vcovCR(
+      obj = model1_girl_bot_unres2, 
+      cluster = subset(p_bot_girl_dta, siblings_4 == 0)$school_id,
+      type = "CR2"
+      )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model1_girl_bot_unres2, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+
+  # assigning values to the table
+  splitting_models_table_4_log[i + 1, 7] <- logit[1, 2]
+  splitting_models_table_4_log[i + 1, 8] <- logit[1, 3]
+}
+
+```
+
+Next, we will add the different mean and observation values to the data frame. 
+```{r}
+# Dependent Variable Mean
+splitting_models_table_4_log[1, 1] <- mean(
+  subset(p_top_girl_dta, siblings_4 == 1)$bagrut_status
+  )
+splitting_models_table_4_log[1, 3] <- mean(
+  subset(p_top_girl_dta, siblings_4 == 0)$bagrut_status
+  )
+splitting_models_table_4_log[1, 5] <- mean(
+  subset(p_bot_girl_dta, siblings_4 == 1)$bagrut_status
+  )
+splitting_models_table_4_log[1, 7] <- mean(
+  subset(p_bot_girl_dta, siblings_4 == 0)$bagrut_status
+  )
+
+# Number of observations per group
+splitting_models_table_4_log[4, 1] <- nrow(
+  subset(p_top_girl_dta, siblings_4 == 1)
+  )
+splitting_models_table_4_log[4, 3] <- nrow(
+  subset(p_top_girl_dta, siblings_4 == 0)
+  )
+splitting_models_table_4_log[4, 5] <- nrow(
+  subset(p_bot_girl_dta, siblings_4 == 1)
+  )
+splitting_models_table_4_log[4, 7] <- nrow(
+  subset(p_bot_girl_dta, siblings_4 == 0)
+  )
+```
+
+Then we work on the aesthetics of our table. we will name both the columns as rows and also merge the estimates with standard coefficients and clean up the NAs.
+```{r}
+# renaming the data frame columns
+colnames(splitting_models_table_4_log) <- c(
+  "Top", "SE", "Top ", "SE ", "Bottom", " SE", "Bottom ", " SE "
+  )
+
+# renaming the data frame rows
+rownames(splitting_models_table_4_log) <- c(
+  "Dependent Variable Mean", 
+  "Model 1",
+  "Model 3",
+  "Number of Students"
+  )
+
+# Rounding the values in the data frame to 3 decimals
+splitting_models_table_4_log <- round(splitting_models_table_4_log, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for(i in 1:2){
+  splitting_models_table_4_log[i + 1, 1] <- paste(
+    splitting_models_table_4_log[i + 1, 1], "<br>(", 
+    splitting_models_table_4_log[i + 1, 2], ")", 
+    sep = ""
+    )
+
+  splitting_models_table_4_log[i + 1, 3] <- paste(
+    splitting_models_table_4_log[i + 1, 3], "<br>(", 
+    splitting_models_table_4_log[i + 1, 4], ")", 
+    sep = ""
+    )
+  splitting_models_table_4_log[i + 1, 5] <- paste(
+    splitting_models_table_4_log[i + 1, 5], "<br>(", 
+    splitting_models_table_4_log[i + 1, 6], ")", 
+    sep = ""
+    )
+  
+  splitting_models_table_4_log[i + 1, 7] <- paste(
+    splitting_models_table_4_log[i + 1, 7], "<br>(", 
+    splitting_models_table_4_log[i + 1, 8], ")", 
+    sep = ""
+    )
+}
+  
+# generate line breaks in the cell between the coefficient and standard error
+splitting_models_table_4_log[, 1] <- linebreak(splitting_models_table_4_log[, 1])
+splitting_models_table_4_log[, 3] <- linebreak(splitting_models_table_4_log[, 3])
+splitting_models_table_4_log[, 5] <- linebreak(splitting_models_table_4_log[, 5])
+splitting_models_table_4_log[, 7] <- linebreak(splitting_models_table_4_log[, 7])
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+splitting_models_table_4_log <- splitting_models_table_4_log %>%
+  select(-2, -4, -6, -8) 
+```
+
+---
+
+## Table 11. Sample Splitting - Marginal Girls Subgroup
+
+```{r}
+# Merging both models for the table by column
+splitting_models_table_4_girls <- cbind(
+  splitting_models_table_4, splitting_models_table_4_log
+  )
+
+# Creating the table
+splitting_models_table_4_girls %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 11: Sample Splitting - Marginal Subgroup Girls</b>",
+    col.names = c(
+      ">= 4", "< 4", ">= 4", "< 4", ">= 4", "< 4", ">= 4", "< 4"
+      ),
+    align = "l"
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left"
+    ) %>%
+  add_header_above(c(
+   " " = 1, "Top" = 2, "Bottom" = 2, "Top" = 2, "Bottom" = 2)
+    ) %>%
+  
+  # Quartile classification
+  add_header_above(c(
+    " " = 1, "Quartile Dummies (ls)" = 4, "Quartile Dummies (p)" = 4)
+  ) %>%
+  pack_rows("Models:", 2, 3) %>%
+  
+  # Adding footnotes for the table
+  footnote(
+    general = "This table reports logit estimates, i.e., marginal effects. The estimates in this table were constructed using the samples from 2001. BRL standard errors are reported in parantheses.",
+    footnote_as_chunk = T
+  )
+```
+
+---
+
+# Appendix A. Siblings (Lisa)
+
+## Table 2 Replication with categorical siblings 
+
+In this part we have divided the sibling data into 5 categories:
+- 1
+- 2
+- 3
+- 4
+- 4+
+
+This is included in the Appendix because only the category 4+ was significant at the 5% level. Therefore, we opt to choose the already existing variable **siblings_4**, which indicates whether the student has at least 4 siblings.
+
+```{r}
+# Defining all the models that need to be run separately for the 
+# groups
+models_all <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + pair + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+  father_educ + mother_educ + ls_50 + ls_75 + ls_100 + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + pair + sib_category"
+)
+
+models_boys <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + sib_category"
+  )
+
+models_girls <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + sib_category", 
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + sib_category"
+  )
+
+# creating the dataframe where the values will be saved
+table_2_siblings <- data.frame(NULL)
+
+# A for loop that loops over the different models that are being
+# calculated
+# All
+for(i in 1:4){
+  
+  # OLS regression
+  model <- lm(as.formula(paste(models_all[[i]])), data = data_2001)
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(obj = model, cluster = data_2001$school_id, vcov = "CR2")
+  
+  # assigning values to the table
+  table_2_siblings[i, 1] <- y[2,2]
+  table_2_siblings[i, 2] <- y[2,3]
+}
+
+
+
+for(i in 1:4){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(models_all[[i]])), 
+    data = data_2001,
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(obj = model, cluster = data_2001$school_id, type = "CR2")
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_2_siblings[i, 3] <- logit[1, 2]
+  table_2_siblings[i, 4] <- logit[1, 3]
+}
+
+# A for loop that loops over the different models that are being
+# calculated
+# Boys
+k = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    as.formula(paste(models_boys[[i]])), 
+    data = subset(data_2001, boy == 1)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_siblings[k, 5] <- y[2,2]
+  table_2_siblings[k, 6] <- y[2,3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  k = k + 2
+}
+
+k = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(models_boys[[i]])), 
+    data = subset(data_2001, boy == 1),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_2_siblings[k, 7] <- logit[1, 2]
+  table_2_siblings[k, 8] <- logit[1, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  k = k + 2
+}
+
+# A for loop that loops over the different models that are being
+# calculated
+# Girls
+m = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    as.formula(paste(models_girls[[i]])), 
+    data = subset(data_2001, boy == 1)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_siblings[m, 9] <- y[2,2]
+  table_2_siblings[m, 10] <- y[2,3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  m = m + 2
+}
+
+m = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(models_girls[[i]])), 
+    data = subset(data_2001, boy == 0),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2001, boy == 0)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = "treated", 
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_2_siblings[m, 11] <- logit[1, 2]
+  table_2_siblings[m, 12] <- logit[1, 3]
+  
+  # As the gender subgroups have no models with pair effects included, we have
+  # to skip some of the rows to avoid adding values to a paired model
+  m = m + 2
+}
+
+# renaming the data frame columns
+colnames(table_2_siblings) <- c(
+  "OLS All","SE All", "Logit All", "SE All ", 
+  "OLS Boys", "SE Boys", "Logit Boys", "SE Boys ",
+  "OLS Girls", "SE Girls", "Logit Girls", "SE Girls "
+  )
+
+# renaming the data frame rows
+rownames(table_2_siblings) <- c(
+  "Model 1", "Model 2", "Model 3", "Model 4"
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_2_siblings <- round(table_2_siblings, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:4){
+  table_2_siblings[i, 1] <- paste(
+    table_2_siblings[i, 1], "<br>(", table_2_siblings[i, 2], ")", sep = ""
+    )
+  table_2_siblings[i, 3] <- paste(
+    table_2_siblings[i, 3], "<br>(", table_2_siblings[i, 4], ")", sep = ""
+    )
+  table_2_siblings[i, 5] <- paste(
+    table_2_siblings[i, 5], "<br>(", table_2_siblings[i, 6], ")", sep = ""
+    )
+  table_2_siblings[i, 7] <- paste(
+    table_2_siblings[i, 7], "<br>(", table_2_siblings[i, 8], ")", sep = ""
+    )
+  table_2_siblings[i, 9] <- paste(
+    table_2_siblings[i, 9], "<br>(", table_2_siblings[i, 10], ")", sep = ""
+    )
+  table_2_siblings[i, 11] <- paste(
+    table_2_siblings[i, 11], "<br>(", table_2_siblings[i, 12], ")", sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_2_siblings[, 1] <- linebreak(table_2_siblings[, 1])
+table_2_siblings[, 3] <- linebreak(table_2_siblings[, 3])
+table_2_siblings[, 5] <- linebreak(table_2_siblings[, 5])
+table_2_siblings[, 7] <- linebreak(table_2_siblings[, 7])
+table_2_siblings[, 9] <- linebreak(table_2_siblings[, 9])
+table_2_siblings[, 11] <- linebreak(table_2_siblings[, 11])
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_2_siblings <- table_2_siblings %>%
+  select(-2, -4, -6, -8, -10, -12) 
+
+# removing any values from the cells that do not have any values
+table_2_siblings[table_2_siblings == "NA<br>(NA)"] <- "—"
+
+# Creating the table
+table_2_siblings %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table 2 Replication with Siblings</b>",
+    col.names = c(
+      "OLS", "Logit", "OLS", "Logit", "OLS", "Logit"
+      ),
+    align = "l"
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left"
+    ) %>%
+  add_header_above(c(" " = 1, "All" = 2, "Boys" = 2, "Girls" = 2)) %>%
+  pack_rows("Year: 2001", 1, 4, italic = TRUE, bold = FALSE) %>%
+  pack_rows("School covariates", 1, 2) %>%
+  pack_rows("School covariates, quartile dummies, micro covariates", 3, 4)
+```
+
+---
+
+## Table A1. Treatment Effects For Sibling Categories
+
+Additionally, we made the table that shows the estimates for every siblings category.
+
+```{r}
+# Defining all the models that need to be run separately for the groups
+models_all <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + pair + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+  father_educ + mother_educ + ls_50 + ls_75 + ls_100 + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + pair + sib_category"
+)
+
+models_boys <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + sib_category",
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + sib_category"
+  )
+
+models_girls <- c(
+  "bagrut_status ~ treated + school_arab + school_religious + sib_category", 
+  "bagrut_status ~ treated + school_arab + school_religious + immigrant + 
+    father_educ + mother_educ + ls_50 + ls_75 + ls_100 + sib_category"
+  )
+
+# creating the dataframe where the values will be saved
+table_2_siblings <- data.frame(NULL)
+
+list <- c("treated", "sib_category2", "sib_category3", "sib_category4", "sib_category4+")
+```
+
+```{r}
+# A for loop that loops over the different models that are being calculated
+# All
+m = 1
+for(i in 1:4){
+  
+  # OLS regression
+  model <- lm(as.formula(paste(models_all[[i]])), data = data_2001)
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(obj = model, cluster = data_2001$school_id, vcov = "CR2")
+  
+  # assigning values to the table
+  table_2_siblings[m:(m + 4), 1] <- y[list, 2]
+  table_2_siblings[m:(m + 4), 2] <- y[list, 3]
+  
+  # As there are multiple categories for siblings we have to skip some of the 
+  # rows to avoid adding values to an existing model
+  m = m + 5
+  
+}
+
+
+m = 1
+for(i in 1:4){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(models_all[[i]])), 
+    data = data_2001,
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(obj = model, cluster = data_2001$school_id, type = "CR2")
+  
+  # calculate the marginal effect
+  logit <- margins(
+    model = model, 
+    vcov = V_CR2, 
+    variables = c("treated", "sib_category"),
+    type = "response"
+    ) %>% 
+    summary()
+  
+  # assigning values to the table
+  table_2_siblings[m:(m + 4), 3] <- logit[c(5, 1, 2, 3, 4), 2]
+  table_2_siblings[m:(m + 4), 4] <- logit[c(5, 1, 2, 3, 4), 3]
+  
+  # As there are multiple categories for siblings we have to skip some of the 
+  # rows to avoid adding values to an existing model
+  m = m + 5
+}
+```
+
+```{r}
+# A for loop that loops over the different models that are being calculated
+# Boys
+k = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    as.formula(paste(models_boys[[i]])), 
+    data = subset(data_2001, boy == 1)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_siblings[k:(k + 4), 5] <- y[list, 2]
+  table_2_siblings[k:(k + 4), 6] <- y[list, 3]
+  
+  # As there are multiple categories for siblings we have to skip some of the 
+  # rows to avoid adding values to an existing model
+  k = k + 10
+}
+
+
+k = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(models_boys[[i]])), 
+    data = subset(data_2001, boy == 1),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2001, boy == 1)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+      model = model, 
+      vcov = V_CR2, 
+      variables = c("treated", "sib_category"), 
+      type = "response"
+      ) %>% 
+      summary()
+  
+  # assigning values to the table
+  table_2_siblings[k:(k + 4), 7] <- logit[c(5, 1, 2, 3, 4), 2]
+  table_2_siblings[k:(k + 4), 8] <- logit[c(5, 1, 2, 3, 4), 3]
+  
+  # As there are multiple categories for siblings we have to skip some of the 
+  # rows to avoid adding values to an existing model
+  k = k + 10
+}
+```
+
+```{r}
+# A for loop that loops over the different models that are being calculated
+# Girls
+m = 1
+for(i in 1:2){
+  
+  # OLS regression
+  model <- lm(
+    as.formula(paste(models_girls[[i]])), 
+    data = subset(data_2001, boy == 0)
+    )
+  
+  # Standard errors are adjusted with BRL
+  y <- coef_test(
+    obj = model, 
+    cluster = subset(data_2001, boy == 0)$school_id, 
+    vcov = "CR2"
+    )
+  
+  # assigning values to the table
+  table_2_siblings[m:(m + 4), 9] <- y[list, 2]
+  table_2_siblings[m:(m + 4), 10] <- y[list, 3]
+  
+  # As there are multiple categories for siblings we have to skip some of the 
+  # rows to avoid adding values to an existing model
+  m = m + 10
+}
+
+m = 1
+for(i in 1:2){
+  
+  # Logit regression
+  model <- glm(
+    formula = as.formula(paste(models_girls[[i]])), 
+    data = subset(data_2001, boy == 0),
+    family = binomial(link = "logit")
+    )
+  
+  # Standard errors are adjusted with BRL
+  V_CR2 <- vcovCR(
+    obj = model, 
+    cluster = subset(data_2001, boy == 0)$school_id, 
+    type = "CR2"
+    )
+  
+  # calculate the marginal effect
+  logit <- margins(
+      model = model, 
+      vcov = V_CR2, 
+      variables = c("treated", "sib_category"), 
+      type = "response"
+      ) %>% 
+      summary()
+  
+  # assigning values to the table
+  table_2_siblings[m:(m + 4), 11] <- logit[c(5, 1, 2, 3, 4), 2]
+  table_2_siblings[m:(m + 4), 12] <- logit[c(5, 1, 2, 3, 4), 3]
+  
+  # As there are multiple categories for siblings we have to skip some of the 
+  # rows to avoid adding values to an existing model
+  m = m + 10
+}
+```
+
+```{r}
+# renaming the data frame columns
+colnames(table_2_siblings) <- c(
+  "OLS All","SE All", "Logit All", "SE All ", 
+  "OLS Boys", "SE Boys", "Logit Boys", "SE Boys ",
+  "OLS Girls", "SE Girls", "Logit Girls", "SE Girls "
+  )
+# renaming the data frame rows
+rownames(table_2_siblings) <- c(
+  "Treated", "2 Siblings", "3 Siblings", "4 Siblings", "4+ Siblings",
+  "Treated ", "2 Siblings ", "3 Siblings ", "4 Siblings ", "4+ Siblings ",
+  "Treated  ", "2 Siblings  ", "3 Siblings  ", "4 Siblings  ", "4+ Siblings  ",
+  "Treated   ", "2 Siblings   ", "3 Siblings   ", "4 Siblings   ", 
+  "4+ Siblings   "
+  )
+
+# Rounding the values in the data frame to 3 decimals
+table_2_siblings <- round(table_2_siblings, 3)
+
+# We loop over the rows to put the standard errors in the same cell as the 
+# differences.
+# This is how we will format the table with a coefficient and below it 
+# the standard error
+for (i in 1:20){
+  table_2_siblings[i, 1] <- paste(
+    table_2_siblings[i, 1], "<br>(", table_2_siblings[i, 2], ")", sep = ""
+    )
+  table_2_siblings[i, 3] <- paste(
+    table_2_siblings[i, 3], "<br>(", table_2_siblings[i, 4], ")", sep = ""
+    )
+  table_2_siblings[i, 5] <- paste(
+    table_2_siblings[i, 5], "<br>(", table_2_siblings[i, 6], ")", sep = ""
+    )
+  table_2_siblings[i, 7] <- paste(
+    table_2_siblings[i, 7], "<br>(", table_2_siblings[i, 8], ")", sep = ""
+    )
+  table_2_siblings[i, 9] <- paste(
+    table_2_siblings[i, 9], "<br>(", table_2_siblings[i, 10], ")", sep = ""
+    )
+  table_2_siblings[i, 11] <- paste(
+    table_2_siblings[i, 11], "<br>(", table_2_siblings[i, 12], ")", sep = ""
+    )
+}
+
+# generate line breaks in the cell between the coefficient and standard error
+table_2_siblings[, 1] <- linebreak(table_2_siblings[, 1])
+table_2_siblings[, 3] <- linebreak(table_2_siblings[, 3])
+table_2_siblings[, 5] <- linebreak(table_2_siblings[, 5])
+table_2_siblings[, 7] <- linebreak(table_2_siblings[, 7])
+table_2_siblings[, 9] <- linebreak(table_2_siblings[, 9])
+table_2_siblings[, 11] <- linebreak(table_2_siblings[, 11])
+
+# delete the columns of the standard errors that are now included in the 
+# difference columns
+table_2_siblings <- table_2_siblings %>%
+  select(-2, -4, -6, -8, -10, -12) 
+
+# removing any values from the cells that do not have any values
+table_2_siblings[table_2_siblings == "NA<br>(NA)"] <- "—"
+
+# Creating the table
+table_2_siblings %>%
+    kable(
+    format = "html",
+    escape = FALSE,
+    caption = "<b>Table A1: Treatment Effects For Sibling Categories</b>",
+    col.names = c(
+      "OLS", "Logit", "OLS", "Logit", "OLS", "Logit"
+      ),
+    align = "l"
+    ) %>%
+  kable_classic(
+    full_width = F, 
+    html_font = "Times New Roman", 
+    position = "left"
+    ) %>%
+  add_header_above(c(" " = 1, "All" = 2, "Boys" = 2, "Girls" = 2)) %>%
+  pack_rows("Year: 2001", 1, 20, italic = TRUE, bold = FALSE) %>%
+  pack_rows("School covariates", 1, 10) %>%
+  pack_rows("Model 1", 1, 5, italic = TRUE, bold = TRUE) %>%
+  pack_rows("Model 2", 6, 10, italic = TRUE, bold = TRUE) %>%
+  pack_rows("School covariates, quartile dummies, micro covariates", 11, 20) %>%
+  pack_rows("Model 3", 11, 15, italic = TRUE, bold = TRUE) %>%
+  pack_rows("Model 4", 16, 20, italic = TRUE, bold = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+---

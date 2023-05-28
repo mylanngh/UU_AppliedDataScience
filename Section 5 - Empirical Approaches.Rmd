@@ -1,0 +1,3058 @@
+---
+title: 'Section 5: Empirical Approaches'
+author: "Lan Nguyen (6687547) | Lisa Verlare (6929699) | Nguyen Thuy Duong (6827209)"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+```{r packages, include=FALSE}
+library(haven)
+library(tidyverse)
+library(dplyr)
+library(clubSandwich)
+library(kableExtra)
+library(vtable)
+library(ggpubr)
+library(gridExtra)
+library(ggplot2)
+library(Hmisc) # statistic table format 
+library(strucchange)  #Chow test
+library(margins) # logit marginal effect
+library(sandwich) # correct downward-biased standard errors
+library(corrplot)
+library(RColorBrewer)
+library(webshot)
+#webshot::install_phantomjs()
+library(magick)
+library(psych)
+library(ggpubr)
+```
+
+```{r}
+# loading the data sets into the environment
+data_1999 <- readRDS(file = "data/data_1999.Rda")
+data_2000 <- readRDS(file = "data/data_2000.Rda")
+data_2001 <- readRDS(file = "data/data_2001.Rda")
+data_2002 <- readRDS(file = "data/data_2002.Rda")
+```
+
+
+# Model Replication (Lan + Lisa)
+    
+    * Models for boy subset are specified with `b` (e.g. lm_model1b).
+    * Models for girl subset are specified with `c` (e.g. lm_model 1c).
+    * Models for whole sample are specified without extra letter (e.g. lm_model)
+
+## Table 2. Treatment Effects 
+
+In this part, we are replicating the original models using the **Ordinary Least Squared** and **Logistic Regression**. We also apply **Biased Reduced Linearization** (_BRL_) estimator to address the problem of downward-biased standard errors generated with **Generalizaed Estimating Equations** (_GEE_). 
+
+### Ordinary Least Squared
+**Boys + Girls**
+
+```{r}
+# M1 (No Pair effect)
+  # School Covariates
+
+lm_model1 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious, 
+  data = data_2001
+  )
+
+coef_test(
+  obj = lm_model1, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+
+```{r}
+# M2 (Pair effect)
+  # School Covariates
+
+lm_model2 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + pair, 
+  data = data_2001
+  )
+
+coef_test(
+  obj = lm_model2, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+
+```{r}
+# M3 (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  
+lm_model3 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100, 
+  data = data_2001
+  )
+
+coef_test(
+  obj = lm_model3, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+
+```{r}
+# M4 (Pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates 
+
+lm_model4 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + 
+    ls_100 + pair, 
+  data = data_2001
+  )
+
+coef_test(
+  obj = lm_model4, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+---
+
+**Boys**
+
+```{r}
+# M1b (No Pair effect)
+  # School Covariates
+  # Subset of boys
+
+lm_model1b <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious, 
+  data = subset(data_2001, boy == 1)
+  )
+
+coef_test(
+  obj = lm_model1b,  
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+```{r}
+# M3b (No pair effect)
+   # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of boys
+
+lm_model3b <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, boy == 1)
+  )
+
+coef_test(
+  obj = lm_model3b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+---
+
+**Girls**
+
+```{r}
+# M1c (No Pair effect)
+  # School Covariates
+  # Subset of girls
+
+lm_model1c <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious, 
+  data = subset(data_2001, boy == 0)
+  )
+
+coef_test(
+  obj = lm_model1c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+```{r}
+# M3c (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of girls
+
+lm_model3c <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, boy == 0)
+  )
+
+coef_test(
+  obj = lm_model3c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+---
+
+### Logistic Regression
+
+**Boys + Girls**
+
+```{r}
+# M1 (No Pair effect)
+  # School Covariates
+
+logit_model1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious,
+  family = binomial(link = "logit"),
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_model1, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model1, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+```{r}
+# M2 (Pair effect)
+  # School Covariates
+
+logit_model2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + pair,
+  family = binomial(link = "logit"),
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_model2, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model2, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+```{r}
+# M3 (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  
+logit_model3 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_model3, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model3, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+```{r}
+# M4 (Pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates 
+
+logit_model4 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + 
+    ls_100 + pair,
+  family = binomial(link = "logit"),
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(obj = logit_model4, cluster = data_2001$school_id, type = "CR2")
+
+margins(
+  model = logit_model4, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+---
+
+**Boys**
+
+```{r}
+# M1b (No Pair effect)
+  # School Covariates
+  # Subset of boys
+
+logit_model1b <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 1)
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_model1b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model1b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+```{r}
+# M3b (No pair effect)
+   # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of boys
+
+logit_model3b <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 1)
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_model3b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model3b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+---
+
+**Girls**
+
+```{r}
+# M1c (No Pair effect)
+  # School Covariates
+  # Subset of girls
+
+logit_model1c <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 0)
+  )
+
+V_CR2 <- vcovCR(
+  obj = logit_model1c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model1c, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+```{r}
+# M3c (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of girls
+
+logit_model3c <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 0)
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_model3c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model3c, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+---
+
+
+## Table 4. Panel A (2001): *Marginal students subset*
+
+We replicate the **logit marginal effects** in *top* and *bottom subgroups* for each gender, classified by lagged scores.
+
+$Model_1:\ Bagrut = B_0 + B_1*Arab + B_2*Religious + B_3 * year * quantiles + \sum_{4}^{n} B_n*Quantiles + boys == {0, 1}$
+
+Where marginal subgroups include:
+
+  + 1st quantile students: bottom half
+  
+  + 3rd quantile students: top half
+  
+$Model_2:\ Bagrut = B_0 + B_1*Arab + B_2*Religious + \sum_{3}^{n} B_n*Linear\ lagged\ score$
+
+Any school with a mean Bagrut rate of zero drops out of the logit sample because a few schools were open in one year and closed in another.
+
+### Classified by Lagged score
+
+We now replicate 4 subgroups (number of students).
+
+```{r}
+# Create 2 subsets based on gender
+
+boy_2001 <- data_2001 %>% filter(boy == 1)
+girl_2001 <- data_2001 %>% filter(boy == 0)
+```
+
+
+```{r}
+# Compute lag score quartile
+
+## Boy
+boy_2001 <- boy_2001 %>% 
+  mutate(ls_100 = as.numeric(lagscore >= quantile(lagscore, 0.75)),
+         ls_75 = as.numeric(
+           lagscore >= quantile(lagscore, 0.50) & 
+             lagscore < quantile(lagscore, 0.75)
+           ),
+         ls_50 = as.numeric(
+           lagscore >= quantile(lagscore, 0.25) & 
+             lagscore < quantile(lagscore, 0.50)
+           ),
+         ls_25 =  as.numeric(lagscore < quantile(lagscore, 0.25)))
+
+## Girl
+girl_2001 <- girl_2001 %>% 
+  mutate(ls_100 = as.numeric(lagscore >= quantile(lagscore, 0.75)),
+         ls_75 = as.numeric(
+           lagscore >= quantile(lagscore, 0.50) & 
+             lagscore < quantile(lagscore, 0.75)
+           ),
+           ls_50 = as.numeric(
+             lagscore >= quantile(lagscore, 0.25) & 
+               lagscore < quantile(lagscore, 0.50)
+             ),
+         ls_25 =  as.numeric(lagscore < quantile(lagscore, 0.25)))
+```
+
+
+```{r}
+# Create a new dummy for top and bottom lagscore subgroups (ls_75 + ls_100) (top = 1, bottom = 0)
+
+boy_2001 <- boy_2001 %>%
+              mutate(top_ls = ifelse(ls_75 == 1 | ls_100 == 1, 1, 0),
+                     ls = lagscore)
+
+girl_2001 <- girl_2001 %>%
+              mutate(top_ls = ifelse(ls_75 == 1 | ls_100 == 1, 1, 0),
+                     ls = lagscore)
+
+```
+
+
+```{r}
+# Create 4 subsets based on gender and dummy for top lagscore
+
+## Boys
+ls_bot_boy_dta <- subset(boy_2001, top_ls == 0)  
+
+ls_top_boy_dta <- subset(boy_2001, top_ls == 1) 
+
+## Girls
+ls_top_girl_dta <- subset(girl_2001, top_ls == 1)
+
+ls_bot_girl_dta <- subset(girl_2001, top_ls == 0)
+```
+
+We will save this dataset in our *data* file, to be able to access it in other Rmd files as well.
+
+```{r}
+# saving the data sets
+saveRDS(ls_bot_boy_dta, file = "data/ls_bot_boy_dta.Rda")
+saveRDS(ls_top_boy_dta, file = "data/ls_top_boy_dta.Rda")
+saveRDS(ls_top_girl_dta, file = "data/ls_top_girl_dta.Rda")
+saveRDS(ls_bot_girl_dta, file = "data/ls_bot_girl_dta.Rda")
+```
+
+---
+
+  **Dependent Variable Means**
+
+```{r}
+mean(ls_bot_boy_dta$bagrut_status)
+mean(ls_top_boy_dta$bagrut_status)
+mean(ls_top_girl_dta$bagrut_status)
+mean(ls_bot_girl_dta$bagrut_status)
+```
+
+---
+  
+**Boys**
+```{r}
+# Model 1. School covariates + quartile dummies
+
+# Top
+ls_top_boy_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls_100,
+  family = binomial(link = "logit"),
+  data = ls_top_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_top_boy_mod1, 
+                cluster = ls_top_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_top_boy_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+ls_bot_boy_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls_50,
+  family = binomial(link = "logit"),
+  data = ls_bot_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_bot_boy_mod1, 
+                cluster = ls_bot_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_bot_boy_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+
+```{r}
+# Model 2. School covariates + linear lagged score
+
+# Top
+ls_top_boy_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls,
+  family = binomial(link = "logit"),
+  data = ls_top_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_top_boy_mod2, 
+                cluster = ls_top_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_top_boy_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+ls_bot_boy_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls,
+  family = binomial(link = "logit"),
+  data = ls_bot_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_bot_boy_mod2, 
+                cluster = ls_bot_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_bot_boy_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+
+---
+
+**Girls**
+```{r}
+# Model 1. School covariates + quartile dummies
+
+# Top
+ls_top_girl_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls_100,
+  family = binomial(link = "logit"),
+  data = ls_top_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_top_girl_mod1, 
+                cluster = ls_top_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_top_girl_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+ls_bot_girl_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls_50,
+  family = binomial(link = "logit"),
+  data = ls_bot_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_bot_girl_mod1, 
+                cluster = ls_bot_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_bot_girl_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+
+```{r}
+# Model 2. School covariates + linear lagged score
+
+# Top
+ls_top_girl_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls,
+  family = binomial(link = "logit"),
+  data = ls_top_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_top_girl_mod2, 
+                cluster = ls_top_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_top_girl_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+
+ls_bot_girl_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + ls,
+  family = binomial(link = "logit"),
+  data = ls_bot_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = ls_bot_girl_mod2, 
+                cluster = ls_bot_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = ls_bot_girl_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+
+---
+
+### Classified by Predicted Probability
+
+We now replicate 4 subgroups (number of students)
+
+```{r}
+# Compute predicted probability quartile
+
+## Boy
+
+### Predicting model
+model <- glm(
+  formula = bagrut_status ~ school_arab + school_religious + father_educ + 
+    mother_educ + immigrant + siblings_4 + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = boy_2001
+  )
+
+### Quartiling for boys
+boy_2001 <- boy_2001 %>% 
+  mutate(p = predict(model, newdata = boy_2001, type = "response")) 
+
+boy_2001 <- boy_2001 %>% 
+  mutate(p_100 = as.numeric(p >= quantile(p, 0.75)),
+         p_75 = as.numeric(p >= quantile(p, 0.50) & p < quantile(p, 0.75)),
+         p_50 = as.numeric(p >= quantile(p, 0.25) & p < quantile(p, 0.50)),
+         p_25 = as.numeric(p < quantile(p, 0.25)),
+         top_p = ifelse(p_75 == 1 | p_100 == 1, 1, 0))
+
+```
+
+```{r}
+# Compute predicted probability quartile
+
+## Girl
+
+### Predicting model
+model <- glm(
+  formula = bagrut_status ~ school_arab + school_religious + father_educ + 
+    mother_educ + immigrant + siblings_4 + ls_50 + ls_75 + ls_100,
+  family = binomial(link = "logit"),
+  data = girl_2001
+  )
+
+### Quartiling for girls
+girl_2001 <- girl_2001 %>% 
+  mutate(p = predict(model, newdata = girl_2001, type = "response")) 
+
+
+girl_2001 <- girl_2001 %>% 
+  mutate(p_100 = as.numeric(p >= quantile(p, 0.75)),
+         p_75 = as.numeric(p >= quantile(p, 0.50) & p < quantile(p, 0.75)),
+         p_50 = as.numeric(p >= quantile(p, 0.25) & p < quantile(p, 0.50)),
+         p_25 = as.numeric(p < quantile(p, 0.25)),
+         top_p = ifelse(p_75 == 1 | p_100 == 1, 1, 0))
+```
+
+
+```{r}
+# Create 4 subsets based on gender and dummy for top predicted probability
+
+## Boys
+p_bot_boy_dta <- subset(boy_2001, top_p == 0)  
+
+p_top_boy_dta <- subset(boy_2001, top_p == 1)  
+
+## Girls
+p_top_girl_dta <- subset(girl_2001, top_p == 1)
+
+p_bot_girl_dta <- subset(girl_2001, top_p == 0)
+```
+
+We will save this dataset in our *data* file, to be able to access it in other Rmd files as well.
+
+```{r}
+# saving the data sets
+saveRDS(p_bot_boy_dta, file = "data/p_bot_boy_dta.Rda")
+saveRDS(p_top_boy_dta, file = "data/p_top_boy_dta.Rda")
+saveRDS(p_top_girl_dta, file = "data/p_top_girl_dta.Rda")
+saveRDS(p_bot_girl_dta, file = "data/p_bot_girl_dta.Rda")
+```
+
+---
+
+  **Dependent Variable Means**
+
+```{r}
+mean(p_bot_boy_dta$bagrut_status)
+mean(p_top_boy_dta$bagrut_status)
+mean(p_top_girl_dta$bagrut_status)
+mean(p_bot_girl_dta$bagrut_status)
+```
+
+---
+  
+**Boys**
+```{r}
+# Model 1. School covariates + quartile dummies
+
+# Top
+p_top_boy_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p_100,
+  family = binomial(link = "logit"),
+  data = p_top_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_top_boy_mod1, 
+                cluster = p_top_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = p_top_boy_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+p_bot_boy_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p_50,
+  family = binomial(link = "logit"),
+  data = p_bot_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_bot_boy_mod1, 
+                cluster = p_bot_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = p_bot_boy_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+
+```{r}
+# Model 2. School covariates + linear predicted probability
+
+# Top
+p_top_boy_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p,
+  family = binomial(link = "logit"),
+  data = p_top_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_top_boy_mod2, 
+                cluster = p_top_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = p_top_boy_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+p_bot_boy_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p,
+  family = binomial(link = "logit"),
+  data = p_bot_boy_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_bot_boy_mod2, 
+                cluster = p_bot_boy_dta$school_id,
+                type = "CR2")
+
+margins(model = p_bot_boy_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+
+---
+
+**Girls**
+```{r}
+# Model 1. School covariates + quartile dummies
+
+# Top
+p_top_girl_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p_100,
+  family = binomial(link = "logit"),
+  data = p_top_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_top_girl_mod1, 
+                cluster = p_top_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = p_top_girl_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+p_bot_girl_mod1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p_50,
+  family = binomial(link = "logit"),
+  data = p_bot_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_bot_girl_mod1, 
+                cluster = p_bot_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = p_bot_girl_mod1, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+
+```{r}
+# Model 2. School covariates + linear predicted probability
+
+# Top
+p_top_girl_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p,
+  family = binomial(link = "logit"),
+  data = p_top_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_top_girl_mod2, 
+                cluster = p_top_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = p_top_girl_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+
+# Bottom
+p_bot_girl_mod2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + p,
+  family = binomial(link = "logit"),
+  data = p_bot_girl_dta
+  )
+
+V_CR2 <- vcovCR(obj = p_bot_girl_mod2, 
+                cluster = p_bot_girl_dta$school_id,
+                type = "CR2")
+
+margins(model = p_bot_girl_mod2, 
+        vcov = V_CR2, 
+        variables = "treated", 
+        type = "response") %>% 
+  summary()
+```
+---
+
+# Heterogeneity Check 
+
+We suspect that the treatment effect might not be consistent for all compliers but instead also depends on different financial situations. Here we assess the study's heterogeneity using 2 approaches
+
+  * Interaction term to estimate interaction effect
+  * Splitting the model and estimate treatment effect for 2 seperate groups of different financial situations.
+
+Assuming that the more children a family has, the more likely they are in financial burdens, we deploy the dummy of having less than 4 siblings `siblings_4` as a proxy for financial status of a family. 
+
+## Interaction term (Lan)
+
+### Ordinary Least Squared
+
+**Boys + Girls**
+
+```{r}
+# M1 (No Pair effect)
+  # School Covariates
+
+lm_interact1 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + treated*siblings_4, 
+  data = data_2001
+  )
+
+
+coef_test(
+  obj = lm_interact1, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+
+```{r}
+# M2 (Pair effect)
+  # School Covariates
+
+lm_interact2 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + pair + 
+    siblings_4 + treated*siblings_4, 
+  data = data_2001
+  )
+
+coef_test(
+  obj = lm_interact2, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+
+```{r}
+# M3 (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  
+lm_interact3 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100 + 
+    siblings_4 + treated*siblings_4, 
+  data = data_2001
+  )
+
+coef_test(
+  obj = lm_interact3, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+
+```{r}
+# M4 (Pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates 
+
+lm_interact4 <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100 + pair + 
+    siblings_4 + treated*siblings_4, 
+  data = data_2001
+  )
+
+coef_test(
+  obj = lm_interact4, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+---
+
+**Boys**
+
+```{r}
+# M1b (No Pair effect)
+  # School Covariates
+  # Subset of boys
+
+lm_interact1b <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + treated*siblings_4, 
+  data = subset(data_2001, boy == 1)
+  )
+
+coef_test(
+  obj = lm_interact1b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+```{r}
+# M3b (No pair effect)
+   # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of boys
+
+lm_interact3b <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + 
+    ls_100 + treated*siblings_4, 
+  data = subset(data_2001, boy == 1)
+  )
+
+coef_test(
+  obj = lm_interact3b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  vcov = "CR2", test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+---
+
+**Girls**
+
+```{r}
+# M1c (No Pair effect)
+  # School Covariates
+  # Subset of girls
+
+lm_interact1c <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + treated*siblings_4, 
+  data = subset(data_2001, boy == 0)
+  )
+
+coef_test(
+  obj = lm_interact1c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+```{r}
+# M3c (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of girls
+
+lm_interact3c <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + 
+    ls_100 + treated*siblings_4, 
+  data = subset(data_2001, boy == 0)
+  )
+
+coef_test(
+  obj = lm_interact3c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[c("treated","treated:siblings_4"), ]
+```
+
+---
+
+**Retrieve covariance matrix of lm models**
+
+**Boys + Girls**
+
+```{r}
+# M1 (No Pair effect)
+  # School Covariates
+
+vcovCR(
+  obj = lm_interact1, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+```
+
+
+```{r}
+# M2 (Pair effect)
+  # School Covariates
+
+vcovCR(
+  obj = lm_interact2, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+```
+
+
+```{r}
+# M3 (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  
+vcovCR(
+  obj = lm_interact3, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+```
+
+
+```{r}
+# M4 (Pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates 
+
+vcovCR(
+  obj = lm_interact4, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+```
+
+---
+
+**Boys**
+
+```{r}
+# M1b (No Pair effect)
+  # School Covariates
+  # Subset of boys
+
+vcovCR(
+  obj = lm_interact1b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+```
+
+```{r}
+# M3b (No pair effect)
+   # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of boys
+
+vcovCR(
+  obj = lm_interact3b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+```
+
+---
+
+**Girls**
+
+```{r}
+# M1c (No Pair effect)
+  # School Covariates
+  # Subset of girls
+
+vcovCR(
+  obj = lm_interact1c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2"
+  )
+```
+
+```{r}
+# M3c (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of girls
+
+vcovCR(
+  obj = lm_interact3c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2"
+  )
+```
+
+---
+
+### Logistic Regression
+
+**Boys + Girls**
+
+```{r}
+# M1 (No Pair effect)
+  # School Covariates
+
+logit_interact1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + treated*siblings_4,
+  family = binomial(link = "logit"),
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact1, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact1, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+```{r}
+# M2 (Pair effect)
+  # School Covariates
+
+logit_interact2 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + pair + 
+    siblings_4 + treated*siblings_4,
+  family = binomial(link = "logit"),
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact2, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact2, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+```{r}
+# M3 (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+
+logit_interact3 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100 + 
+    siblings_4 + treated*siblings_4,
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact3, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact3, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+ 
+```{r}
+# M4 (Pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates 
+
+logit_interact4 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    immigrant + father_educ + mother_educ + ls_50 + ls_75 + ls_100 + pair + 
+    siblings_4 + treated*siblings_4,
+  data = data_2001
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact4, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact4, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+---
+
+**Boys**
+
+```{r}
+# M1b (No Pair effect)
+  # School Covariates
+  # Subset of boys
+
+logit_interact1b <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + treated*siblings_4,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 1)
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact1b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact1b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+```{r}
+# M3b (No pair effect)
+   # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of boys
+
+logit_interact3b <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + 
+    ls_100 + siblings_4 + treated*siblings_4,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 1)
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact3b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact3b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+---
+
+**Girls**
+
+```{r}
+# M1c (No Pair effect)
+  # School Covariates
+  # Subset of girls
+
+logit_interact1c <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + treated*siblings_4,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 0)
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact1c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact1c, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+```{r}
+# M3c (No pair effect)
+  # School Covariates, Quartile dummies, & Micro Covariates
+  # Subset of girls
+
+logit_interact3c <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious + 
+    siblings_4 + immigrant + father_educ + mother_educ + ls_50 + ls_75 + 
+    ls_100 + treated*siblings_4,
+  family = binomial(link = "logit"),
+  data = subset(data_2001, boy == 0)
+  ) 
+
+V_CR2 <- vcovCR(
+  obj = logit_interact3c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_interact3c, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+---
+
+## Splitting Models (Duong)
+
+We want to see whether cash incentives would affect students with many siblings and students without many siblings differently. We categorize students into 2 groups: those with at least 4 siblings (*siblings_4 = 1*) and those with less than 4 siblings (*siblings_4 = 0*). We also attempted to divide sibling data into five groups (=1, =2, =3, = 4, >4 siblings) but found no significant effects on either group. The results are included in the Appendix.
+
+We deploy the replicated models in **Table 2, Panel A.2001** (Replication Section).
+
+
+### Ordinary Least Squared
+
+**Boys + Girls**
+
+*No pair effect*
+
+```{r}
+  # Unrestricted model
+    # Replicated model 1 
+lm_model1
+
+  # Unrestricted models 
+unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisons
+coef_test(
+  obj = lm_model1, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", 
+          test = "naive-t"
+          )[2,]
+
+coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", 
+          test = "naive-t"
+          )[2,]
+```
+
+*Pair effect*
+
+```{r}
+  # Unrestricted model
+    # Replicated model 2
+lm_model2
+
+  # Unrestricted models 
+unres_1b <- lm(
+  formula = bagrut_status ~ treated + pair +  school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+
+unres_2b <- lm(
+  formula = bagrut_status ~ treated + pair + school_religious + school_arab, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisions
+coef_test(obj = lm_model2, 
+          cluster = data_2001$school_id, 
+          vcov = "CR2", 
+          test = "naive-t"
+          )[2,]
+
+coef_test(obj = unres_1b, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", 
+          test = "naive-t"
+          )[2,]
+
+coef_test(obj = unres_2b, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", 
+          test = "naive-t"
+          )[2,]
+```
+
+
+**Sub-conclusions:** 
+
+    * The estimated coefficients on treatment are statistically insignificant in the simple models that contain school covariates only, no matter if pair effect is controlled for.
+    
+    * The number of siblings a student has does not influence his or her Bagrrut certification eligibility.
+
+
+*No pair effect*
+
+```{r}
+# Unrestricted model
+  # Replicated model 3
+lm_model3
+
+  # Unrestricted models 
+unres_3 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+
+unres_4 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab + 
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+ 
+ # Correct standard errors for result comparisions
+coef_test(
+  obj = lm_model3, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = unres_3, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = unres_4, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+
+*Pair effect*
+
+```{r}
+# Unrestricted model
+  # Replicated model 4
+lm_model4
+
+  # Unrestricted models 
+unres_3b <- lm(
+  formula = bagrut_status ~ treated + pair + school_religious + school_arab + 
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 1)
+  )
+
+unres_4b <- lm(
+  formula = bagrut_status ~ treated + pair + school_religious + school_arab + 
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+ # Correct standard errors for result comparisions
+coef_test(
+  obj = lm_model4, 
+  cluster = data_2001$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = unres_3b, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = unres_4b, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+
+**Sub-conclusions:**
+
+    * The OLS coefficient on treatement in model **unres_3b** is significant. The incentives has a strong positive effect on the Bagrut certification of students from large families in relative to those from smaller family sizes.
+    
+    * No significant estimates on treatment in other models.
+  
+---
+
+**Boys**
+
+```{r}
+# Replicate model 1b
+# No Pair effect
+  # Restricted model 
+lm_model1b <- lm(
+  formula = bagrut_status ~ treated + school_arab + school_religious, 
+  data = subset(data_2001, boy == 1)
+  )
+
+ # Unrestricted models 
+boy_unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = data_2001 %>% filter (boy == 1, siblings_4 == 1)
+  )
+
+boy_unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = data_2001 %>% filter (boy == 1, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisions
+coef_test(
+  obj = lm_model1b,  
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = boy_unres_1, 
+  cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = boy_unres_2, 
+  cluster = (data_2001 %>% filter (boy == 1, siblings_4 == 0))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+
+```{r}
+# Replicate model 3b
+# No pair effect
+  # Restricted model
+lm_model3b 
+
+# Unrestricted models 
+boy_unres_3 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = data_2001 %>% filter(boy == 1, siblings_4 == 1)
+  )
+
+boy_unres_4 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = data_2001 %>% filter(boy == 1, siblings_4 == 0)
+  )
+ 
+ # Correct standard errors for result comparisions
+coef_test(
+  obj = lm_model3b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  vcov = "CR2", test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = boy_unres_3, 
+  cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = boy_unres_4, 
+  cluster = (data_2001 %>% filter (boy == 1, siblings_4 == 0))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+---
+
+**Girls**
+
+```{r}
+# Replicate model 1c
+# No Pair effect
+  # Restricted model
+
+lm_model1c
+
+ # Unrestricted models 
+girl_unres_1 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 1)
+  )
+girl_unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisions
+coef_test(
+  obj = lm_model1c,  
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = girl_unres_1, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = girl_unres_2, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+
+```{r}
+# Replicate model 3c
+# No pair effect
+  # Restricted model
+
+lm_model3c
+
+# Unrestricted models 
+girl_unres_3 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 1)
+  )
+
+girl_unres_4 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 0)
+  )
+ 
+
+ # Correct standard errors for result comparisions
+coef_test(
+  obj = lm_model3c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = girl_unres_3, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+
+coef_test(
+  obj = girl_unres_4, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id, 
+  vcov = "CR2", 
+  test = "naive-t"
+  )[2,]
+```
+
+---
+
+### Logistic Regression 
+
+This part compares the restricted and unrestricted model using **Logistic Regression**. Again, the **Biased Reduced Linearization** (_BRL_) is used to correct the standard errors.
+
+**Boys + Girls**
+
+*No pair effect*
+
+```{r}
+  # Unrestricted model
+    # Replicated model 1
+logit_model1
+
+logit_model1 <- glm(
+  formula = bagrut_status ~ treated + school_arab + school_religious,
+  family = binomial(link = "logit"),
+  data = data_2001
+  ) 
+  # Unrestricted models 
+log_unres_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+
+log_unres_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(
+  obj = logit_model1, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+
+margins(
+  model = logit_model1, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Unrestricted model 1
+V_CR2 <- vcovCR(
+  obj = log_unres_1, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_1, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Unrestricted model 1s
+V_CR2 <- vcovCR(
+  obj = log_unres_2, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_2, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+*Pair effect*
+
+```{r}
+ # Unrestricted model
+    # Replicated model 2
+logit_model2
+
+  # Unrestricted models 
+log_unres_1b <- glm(
+  formula = bagrut_status ~ treated + pair + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+
+log_unres_2b <- lm(
+  formula = bagrut_status ~ treated + pair + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(
+  obj = logit_model2, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+margins(
+  model = logit_model2, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Unrestricted model 1
+V_CR2 <- vcovCR(
+  obj = log_unres_1b, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_1b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Unrestricted model 1s
+V_CR2 <- vcovCR(
+  obj = log_unres_2b, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_2b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+**Sub-conclusions:** 
+
+    * No significant coefficents are found.
+
+
+*No pair effect*
+
+```{r}
+# Replicate model 3
+# Unrestricted model
+logit_model3 
+
+  # Unrestricted models 
+log_unres_3 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+
+log_unres_4 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  )
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model 3
+V_CR2 <- vcovCR(
+  obj = logit_model3, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+margins(
+  model = logit_model3, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Restricted model 3
+V_CR2 <- vcovCR(
+  obj = log_unres_3, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_3, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(
+  obj = log_unres_4, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_4, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+*Pair effect*
+
+```{r}
+# Replicate model 4
+# Unrestricted model
+logit_model4 
+
+  # Unrestricted models 
+log_unres_3b <- lm(
+  formula = bagrut_status ~ treated + pair + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 1)
+  )
+
+log_unres_4b <- lm(
+  formula = bagrut_status ~ treated + pair + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = subset(data_2001, siblings_4 == 0)
+  )
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model 3
+V_CR2 <- vcovCR(
+  obj = logit_model4, 
+  cluster = data_2001$school_id, 
+  type = "CR2"
+  )
+margins(
+  model = logit_model4, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Restricted model 3
+V_CR2 <- vcovCR(
+  obj = log_unres_3b, 
+  cluster = subset(data_2001, siblings_4 == 1)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_3b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(
+  obj = log_unres_4b, 
+  cluster = subset(data_2001, siblings_4 == 0)$school_id,
+  type = "CR2"
+  )
+margins(
+  model = log_unres_4b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+**Sub-conclusions:**
+
+    * The Logit coefficient on treatement in model **log_unres_3b** is significant. This is consistent with the finding by the OLS for the **unres_3b** model.
+    --> The incentives has a strong positive effect on the Bagrut certification of students from large families in relative to those from smaller family sizes.
+  
+    * No significant estimates on treatment in other models.
+  
+---
+
+**Boys**
+
+
+```{r}
+# Replicate model 1b
+  # No pair effect
+    # Unrestricted model
+logit_model1b
+
+  # Unrestricted models 
+blog_un_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 1, siblings_4 == 1)
+  )
+
+blog_un_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 1, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(
+  obj = logit_model1b, 
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+margins(
+  model = logit_model1b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+
+    # Unrestricted models
+V_CR2 <- vcovCR(
+  obj = blog_un_1, 
+  cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = blog_un_1, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+
+V_CR2 <- vcovCR(
+  obj = blog_un_2, 
+  cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 0))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = blog_un_2, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% summary()
+```
+
+
+```{r}
+# Replicate model 3b
+# No pair effect
+# Unrestricted model
+logit_model3b
+
+  # Unrestricted models 
+blog_un_3 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 1, siblings_4 == 1)
+  )
+
+blog_un_4 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 1, siblings_4 == 0)
+  )
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model
+V_CR2 <- vcovCR(
+  obj = logit_model3b,
+  cluster = subset(data_2001, boy == 1)$school_id, 
+  type = "CR2"
+  )
+margins(
+  model = logit_model3b, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Restricted model 3
+V_CR2 <- vcovCR(
+  obj = blog_un_3, 
+  cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = blog_un_3, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(
+  obj = blog_un_4, 
+  cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 0))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = blog_un_4, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+---
+
+**Girls**
+
+```{r}
+# Replicate model 1c
+# No Pair effect
+  # School Covariates
+
+logit_model1c
+
+# Unrestricted models 
+glog_un_1 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 1)
+  )
+
+glog_un_2 <- lm(
+  formula = bagrut_status ~ treated + school_religious + school_arab, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 0)
+  )
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(
+  obj = logit_model1c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2"
+  )
+margins(
+  model = logit_model1c, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+
+    # Unrestricted models
+V_CR2 <- vcovCR(
+  obj = glog_un_1, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = glog_un_1, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+V_CR2 <- vcovCR(
+  obj = glog_un_2, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = glog_un_2, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+```
+
+
+```{r}
+# Replicate model 3c
+# No pair effect
+# Unrestricted model
+logit_model3c
+
+  # Unrestricted models 
+glog_un_3 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + 
+    ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 1)
+  )
+
+glog_un_4 <- glm(
+  formula = bagrut_status ~ treated + school_religious + school_arab +
+    father_educ + mother_educ + immigrant + ls_50 + ls_75 + ls_100, 
+  family = binomial(link = "logit"),
+  data = data_2001 %>% filter(boy == 0, siblings_4 == 0)
+  )
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model
+V_CR2 <- vcovCR(
+  obj = logit_model3c, 
+  cluster = subset(data_2001, boy == 0)$school_id, 
+  type = "CR2")
+margins(
+  model = logit_model3c, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+
+    # Restricted model 3
+V_CR2 <- vcovCR(
+  obj = glog_un_3, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = glog_un_3, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(
+  obj = glog_un_4, 
+  cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id,
+  type = "CR2"
+  )
+margins(
+  model = glog_un_4, 
+  vcov = V_CR2, 
+  variables = "treated", 
+  type = "response"
+  ) %>% 
+  summary()
+
+```
+  
+  
+ **Sub-conclusions**
+
+    Both the Ordinary Least Squares and Logistic Regressions show that the cash program does have some significant impact on the Bagrut performance of students who have about 4 or more siblings.
+
+---
+
+## Splitting Models for Marginal Students (Duong)
+
+We want to see whether cash incentives would affect students with many siblings and students without many siblings differently. We categorize students into 2 groups: those with at least 4 siblings (*siblings_4 = 1*) and those with less than 4 siblings (*siblings_4 = 0*). We also attempted to divide sibling data into five groups (=1, =2, =3, = 4, >4 siblings) but found no significant effects on either group. The results are included in the Appendix.
+
+We deploy the replicated models in **Table 2, Panel A.2001** (Replication Section).
+
+
+### Ordinary Least Squared
+
+**Boys + Girls**
+
+*No pair effect*
+
+```{r}
+  # Unrestricted model
+    # Replicated model 1
+lm_model1
+
+  # Unrestricted models 
+unres_1 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+               data = subset(data_2001, siblings_4 == 1))
+unres_2 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+           data = subset(data_2001, siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+coef_test(obj = lm_model1, cluster = data_2001$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_1, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_2, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+*Pair effect*
+
+```{r}
+  # Unrestricted model
+    # Replicated model 2
+lm_model2
+
+  # Unrestricted models 
+unres_1b <- lm(bagrut_status ~ treated + pair +  school_religious + school_arab, 
+               data = subset(data_2001, siblings_4 == 1))
+
+unres_2b <- lm(bagrut_status ~ treated + pair + school_religious + school_arab, 
+               data = subset(data_2001, siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+coef_test(obj = lm_model2, 
+          cluster = data_2001$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_1b, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_2b, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+
+**Sub-conclusions:** 
+
+    * The estimated coefficients on treatment are statistically insignificant in the simple models that contain school covariates only, no matter if pair effect is controlled for.
+  
+    * The number of siblings a student has does not influence his or her Bagrrut certification eligibility.
+
+*No pair effect*
+
+```{r}
+# Replicate model 3
+# Unrestricted model
+lm_model3
+
+  # Unrestricted models 
+unres_3 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                father_educ + mother_educ + immigrant + 
+                ls_50 + ls_75 + ls_100, 
+              data = subset(data_2001, siblings_4 == 1))
+
+unres_4 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                father_educ + mother_educ + immigrant + 
+                ls_50 + ls_75 + ls_100, 
+              data = subset(data_2001, siblings_4 == 0))
+ 
+
+ # Correct standard errors for result comparisions
+coef_test(obj = lm_model3, 
+          cluster = data_2001$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_3, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_4, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+
+*Pair effect*
+
+```{r}
+# Replicate model 4
+# Unrestricted model
+lm_model4
+
+  # Unrestricted models 
+unres_3b <- lm(formula = bagrut_status ~ treated + pair + school_religious +
+                school_arab + father_educ + mother_educ + 
+                immigrant + ls_50 + ls_75 + ls_100, 
+              data = subset(data_2001, siblings_4 == 1))
+
+unres_4b <- lm(formula = bagrut_status ~ treated + pair + school_religious +
+                school_arab + father_educ + mother_educ + 
+                immigrant + ls_50 + ls_75 + ls_100, 
+              data = subset(data_2001, siblings_4 == 0))
+ 
+
+ # Correct standard errors for result comparisions
+coef_test(obj = lm_model4, 
+          cluster = data_2001$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_3b, 
+          cluster = subset(data_2001, siblings_4 == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = unres_4b, 
+          cluster = subset(data_2001, siblings_4 == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+
+**Sub-conclusions:**
+
+    * The OLS coefficient on treatement in model **unres_3b** is significant. The incentives has a strong positive effect on the Bagrut certification of students from large families in relative to those from smaller family sizes.
+    
+    * No significant estimates on treatment in other models.
+    
+---
+
+**Boys**
+
+```{r}
+# Replicate model 1b
+# No Pair effect
+  # Restricted model
+lm_model1b <- lm(
+  bagrut_status ~ treated + school_arab + school_religious, 
+  data = subset(data_2001, boy == 1)
+  )
+
+ # Unrestricted models 
+boy_unres_1 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+                  data = data_2001 %>% filter (boy == 1, siblings_4 == 1))
+boy_unres_2 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+                  data = data_2001 %>% filter (boy == 1, siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+coef_test( obj = lm_model1b,  
+           cluster = subset(data_2001, boy == 1)$school_id, 
+           vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = boy_unres_1, 
+          cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = boy_unres_2, 
+          cluster = (data_2001 %>% filter (boy == 1, siblings_4 == 0))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+
+```{r}
+# Replicate model 3b
+# No pair effect
+  # Restricted model
+lm_model3b 
+
+# Unrestricted models 
+boy_unres_3 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                    father_educ + mother_educ + immigrant + 
+                    ls_50 + ls_75 + ls_100, 
+                  data = data_2001 %>% filter(boy == 1, siblings_4 == 1))
+
+boy_unres_4 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                    father_educ + mother_educ + immigrant + 
+                    ls_50 + ls_75 + ls_100, 
+                 data = data_2001 %>% filter(boy == 1, siblings_4 == 0))
+ 
+ # Correct standard errors for result comparisions
+coef_test(obj = lm_model3b, 
+          cluster = subset(data_2001, boy == 1)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = boy_unres_3, 
+          cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = boy_unres_4, 
+          cluster = (data_2001 %>% filter (boy == 1, siblings_4 == 0))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+---
+
+**Girls**
+
+```{r}
+# Replicate model 1c
+# No Pair effect
+  # Restricted model
+
+lm_model1c
+
+ # Unrestricted models 
+girl_unres_1 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+                   data = data_2001 %>% filter(boy == 0, siblings_4 == 1))
+girl_unres_2 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+                   data = data_2001 %>% filter(boy == 0, siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+coef_test( obj = lm_model1c,  
+           cluster = subset(data_2001, boy == 0)$school_id, 
+           vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = girl_unres_1, 
+          cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = girl_unres_2, 
+          cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+```{r}
+# Replicate model 3c
+# No pair effect
+  # Restricted model
+
+lm_model3c
+
+# Unrestricted models 
+girl_unres_3 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                    father_educ + mother_educ + immigrant + 
+                    ls_50 + ls_75 + ls_100, 
+                    data = data_2001 %>% filter(boy == 0, siblings_4 == 1))
+
+girl_unres_4 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                    father_educ + mother_educ + immigrant + 
+                    ls_50 + ls_75 + ls_100, 
+                  data = data_2001 %>% filter(boy == 0, siblings_4 == 0))
+ 
+
+ # Correct standard errors for result comparisions
+coef_test(obj = lm_model3c, 
+          cluster = subset(data_2001, boy == 0)$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = girl_unres_3, 
+          cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+
+coef_test(obj = girl_unres_4, 
+          cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id, 
+          vcov = "CR2", test = "naive-t")[2,]
+```
+
+---
+
+### Logistic Regression 
+
+This part compares the restricted and unrestricted model using **Logistic Regression**. Again, the **Biased Reduced Linearization** (_BRL_) is used to correct the standard errors.
+
+**Boys + Girls**
+
+*No pair effect*
+
+```{r}
+  # Unrestricted model
+    # Replicated model 1
+logit_model1
+
+logit_model1 <- glm(bagrut_status ~ treated + school_arab + school_religious,
+                    family = binomial(link = "logit"),
+                    data = data_2001) 
+  # Unrestricted models 
+log_unres_1 <- glm(bagrut_status ~ treated + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = subset(data_2001, 
+                                 siblings_4 == 1))
+
+log_unres_2 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = subset(data_2001, 
+                                 siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(logit_model1, 
+                cluster = data_2001$school_id, 
+                type = "CR2")
+margins(logit_model1, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Unrestricted model 1
+V_CR2 <- vcovCR(log_unres_1, 
+                cluster = subset(data_2001, siblings_4 == 1)$school_id,
+                type = "CR2")
+margins(log_unres_1, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Unrestricted model 1s
+V_CR2 <- vcovCR(log_unres_2, 
+                cluster = subset(data_2001, siblings_4 == 0)$school_id,
+                type = "CR2")
+margins(log_unres_2, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+```
+
+
+*Pair effect*
+
+```{r}
+ # Unrestricted model
+    # Replicated model 2
+logit_model2
+
+  # Unrestricted models 
+log_unres_1b <- glm(bagrut_status ~ treated + pair + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = subset(data_2001, 
+                                 siblings_4 == 1))
+
+log_unres_2b <- lm(bagrut_status ~ treated + pair + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = subset(data_2001, 
+                                 siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(logit_model2, 
+                cluster = data_2001$school_id, 
+                type = "CR2")
+margins(logit_model2, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Unrestricted model 1
+V_CR2 <- vcovCR(log_unres_1b, 
+                cluster = subset(data_2001, siblings_4 == 1)$school_id,
+                type = "CR2")
+margins(log_unres_1b, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Unrestricted model 1s
+V_CR2 <- vcovCR(log_unres_2b, 
+                cluster = subset(data_2001, siblings_4 == 0)$school_id,
+                type = "CR2")
+margins(log_unres_2b, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+```
+
+
+**Sub-conclusions:** 
+
+    * No significant coefficents are found.
+
+*No pair effect*
+
+```{r}
+# Replicate model 3
+# Unrestricted model
+logit_model3 
+
+  # Unrestricted models 
+log_unres_3 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                father_educ + mother_educ + immigrant + 
+                ls_50 + ls_75 + ls_100, 
+                family = binomial(link = "logit"),
+                data = subset(data_2001, siblings_4 == 1))
+
+log_unres_4 <- lm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                father_educ + mother_educ + immigrant + 
+                ls_50 + ls_75 + ls_100, 
+                family = binomial(link = "logit"),
+                data = subset(data_2001, siblings_4 == 0))
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model 3
+V_CR2 <- vcovCR(logit_model3, 
+                cluster = data_2001$school_id, 
+                type = "CR2")
+margins(logit_model3, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Restricted model 3
+V_CR2 <- vcovCR(log_unres_3, 
+                cluster = subset(data_2001, siblings_4 == 1)$school_id,
+                type = "CR2")
+margins(log_unres_3, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(log_unres_4, 
+                cluster = subset(data_2001, siblings_4 == 0)$school_id,
+                type = "CR2")
+margins(log_unres_4, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+```
+
+
+*Pair effect*
+
+```{r}
+# Replicate model 4
+# Unrestricted model
+logit_model4 
+
+  # Unrestricted models 
+log_unres_3b <- lm(formula = bagrut_status ~ treated + pair + school_religious + school_arab +
+                father_educ + mother_educ + immigrant + 
+                ls_50 + ls_75 + ls_100, 
+                family = binomial(link = "logit"),
+                data = subset(data_2001, siblings_4 == 1))
+
+log_unres_4b <- lm(formula = bagrut_status ~ treated + pair + school_religious + school_arab +
+                father_educ + mother_educ + immigrant + 
+                ls_50 + ls_75 + ls_100, 
+                family = binomial(link = "logit"),
+                data = subset(data_2001, siblings_4 == 0))
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model 3
+V_CR2 <- vcovCR(logit_model4, 
+                cluster = data_2001$school_id, 
+                type = "CR2")
+margins(logit_model4, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Restricted model 3
+V_CR2 <- vcovCR(log_unres_3b, 
+                cluster = subset(data_2001, siblings_4 == 1)$school_id,
+                type = "CR2")
+margins(log_unres_3b, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(log_unres_4b, 
+                cluster = subset(data_2001, siblings_4 == 0)$school_id,
+                type = "CR2")
+margins(log_unres_4b, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+```
+
+
+**Sub-conclusions:**
+
+    * The Logit coefficient on treatement in model **log_unres_3b** is significant. This is consistent with the finding by the OLS for the **unres_3b** model.
+     --> The incentives has a strong positive effect on the Bagrut certification of students from large families in relative to those from smaller family sizes.
+    * No significant estimates on treatment in other models.
+  
+---
+
+**Boys**
+
+```{r}
+# Replicate model 1b
+  # No pair effect
+    # Unrestricted model
+logit_model1b
+
+  # Unrestricted models 
+blog_un_1 <- glm(bagrut_status ~ treated + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = data_2001 %>% filter(boy == 1, siblings_4 == 1))
+
+blog_un_2 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = data_2001 %>% filter(boy == 1, siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(logit_model1b, 
+                cluster = subset(data_2001, boy == 1)$school_id, 
+                type = "CR2")
+margins(logit_model1b, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+
+    # Unrestricted models
+V_CR2 <- vcovCR(blog_un_1, 
+                cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id,
+                type = "CR2")
+margins(blog_un_1, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+
+V_CR2 <- vcovCR(blog_un_2, 
+                cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 0))$school_id,
+                type = "CR2")
+margins(blog_un_2, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+```
+
+
+```{r}
+# Replicate model 3b
+# No pair effect
+# Unrestricted model
+logit_model3b
+
+  # Unrestricted models 
+blog_un_3 <- glm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                  father_educ + mother_educ + immigrant + 
+                  ls_50 + ls_75 + ls_100, 
+                  family = binomial(link = "logit"),
+                  data = data_2001 %>% filter(boy == 1, siblings_4 == 1))
+
+blog_un_4 <- glm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                 father_educ + mother_educ + immigrant + 
+                 ls_50 + ls_75 + ls_100, 
+                 family = binomial(link = "logit"),
+                 data = data_2001 %>% filter(boy == 1, siblings_4 == 0))
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model
+V_CR2 <- vcovCR(logit_model3b,
+                cluster = subset(data_2001, boy == 1)$school_id, 
+                type = "CR2")
+margins(logit_model3b, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Restricted model 3
+V_CR2 <- vcovCR(blog_un_3, 
+                cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 1))$school_id,
+                type = "CR2")
+margins(blog_un_3, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(blog_un_4, 
+                cluster = (data_2001 %>% filter(boy == 1, siblings_4 == 0))$school_id,
+                type = "CR2")
+margins(blog_un_4, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+```
+
+---
+
+**Girls**
+
+```{r}
+# Replicate model 1c
+# No Pair effect
+  # School Covariates
+
+logit_model1c
+
+# Unrestricted models 
+glog_un_1 <- glm(bagrut_status ~ treated + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = data_2001 %>% filter(boy == 0, siblings_4 == 1))
+
+glog_un_2 <- lm(bagrut_status ~ treated + school_religious + school_arab, 
+                   family = binomial(link = "logit"),
+                   data = data_2001 %>% filter(boy == 0, siblings_4 == 0))
+
+  # Correct standard errors for result comparisions
+    # Restricted model 1
+V_CR2 <- vcovCR(logit_model1c, 
+                cluster = subset(data_2001, boy == 0)$school_id, type = "CR2")
+margins(logit_model1c, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+
+    # Unrestricted models
+V_CR2 <- vcovCR(glog_un_1, 
+                cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id,
+                type = "CR2")
+margins(glog_un_1, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+
+
+V_CR2 <- vcovCR(glog_un_2, 
+                cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id,
+                type = "CR2")
+margins(glog_un_2, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+```
+
+
+```{r}
+# Replicate model 3c
+# No pair effect
+# Unrestricted model
+logit_model3c
+
+  # Unrestricted models 
+glog_un_3 <- glm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                  father_educ + mother_educ + immigrant + 
+                  ls_50 + ls_75 + ls_100, 
+                  family = binomial(link = "logit"),
+                  data = data_2001 %>% filter(boy == 0, siblings_4 == 1))
+
+glog_un_4 <- glm(formula = bagrut_status ~ treated + school_religious + school_arab +
+                 father_educ + mother_educ + immigrant + 
+                 ls_50 + ls_75 + ls_100, 
+                 family = binomial(link = "logit"),
+                 data = data_2001 %>% filter(boy == 0, siblings_4 == 0))
+ 
+
+ # Correct standard errors for result comparisions
+
+    # Unrestricted model
+V_CR2 <- vcovCR(logit_model3c, 
+                cluster = subset(data_2001, boy == 0)$school_id, 
+                type = "CR2")
+margins(logit_model3c, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+
+    # Restricted model 3
+V_CR2 <- vcovCR(glog_un_3, 
+                cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 1))$school_id,
+                type = "CR2")
+margins(glog_un_3, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+    # Restricted model 4
+V_CR2 <- vcovCR(glog_un_4, 
+                cluster = (data_2001 %>% filter(boy == 0, siblings_4 == 0))$school_id,
+                type = "CR2")
+margins(glog_un_4, vcov = V_CR2, variables = "treated", type = "response") %>% summary()
+
+```
+  
+  
+### Conclusions
+
+    Both the Ordinary Least Squares and Logistic Regressions generate similar results.
+
+---
